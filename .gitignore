@@ -1,0 +1,42 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.properties
+gradle-app.setting
+
+# Android Studio
+.idea/
+*.iml
+
+# User-specific files
+*.log
+*.class
+*.jar
+*.war
+*.ear
+*.db
+*.swp
+
+# Android specific
+*.apk
+*.ap_ 
+*.dex
+*.class
+*.so
+*.dSYM
+local.properties
+.DS_Store
+
+# Operating System specific files
+Thumbs.db
+ehthumbs.db
+*.bak
+
+# JetBrains Rider
+.idea/
+
+# Mac OS files
+*.DS_Store
+
+# Windows Installer files
+Thumbs.db
