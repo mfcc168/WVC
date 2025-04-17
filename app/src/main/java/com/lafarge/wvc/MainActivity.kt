@@ -1,71 +1,56 @@
 package com.lafarge.wvc
-import android.util.Log
+
 import android.Manifest
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.net.wifi.ScanResult
 import android.net.wifi.WifiManager
-import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import androidx.core.app.ActivityCompat
-import androidx.core.app.NotificationChannelCompat
-import androidx.core.app.NotificationManagerCompat
-import androidx.core.app.NotificationCompat
-import com.lafarge.wvc.ui.theme.WVCTheme
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.material3.SliderDefaults
+import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationChannelCompat
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import com.lafarge.wvc.ui.theme.WVCTheme
 
 class MainActivity : ComponentActivity() {
 
     private lateinit var wifiManager: WifiManager
     private lateinit var audioManager: AudioManager
     private lateinit var scanReceiver: BroadcastReceiver
-    private var isScanning = false
-    private val handler = Handler(Looper.getMainLooper())
     private lateinit var context: Context
-
-    private val scanRunnable = object : Runnable {
-        override fun run() {
-            if (isScanning) {
-                if (ActivityCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION)
-                    != PackageManager.PERMISSION_GRANTED
-                ) {
-                    Toast.makeText(this@MainActivity, "Location permission required for scanning", Toast.LENGTH_SHORT).show()
-                    return
-                }
-
-                try {
-                    @Suppress("DEPRECATION")
-                    wifiManager.startScan()
-                } catch (e: SecurityException) {
-                    e.printStackTrace()
-                }
-
-                handler.postDelayed(this, 10000) // scan every 10 seconds
-            }
-        }
-    }
 
 
     private val requestPermissionsLauncher = registerForActivityResult(
@@ -142,41 +127,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    @Suppress("DEPRECATION")
-    private fun startScan() {
-        if (!isScanning) {
-            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                Toast.makeText(this, "Location permission required to scan WiFi", Toast.LENGTH_SHORT).show()
-                return
-            }
-
-            try {
-                registerReceiver(scanReceiver, IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION))
-                isScanning = true
-                @Suppress("DEPRECATION")
-                wifiManager.startScan()
-                handler.post(scanRunnable)
-            } catch (e: SecurityException) {
-                e.printStackTrace()
-                Toast.makeText(this, "Permission denied for WiFi scanning", Toast.LENGTH_LONG).show()
-            }
+    private fun startScanService() {
+        val serviceIntent = Intent(this, WiFiScanService::class.java).apply {
+            putExtra("HOME_SSID", currentSSID.value)
         }
+        startService(serviceIntent)
     }
 
-
-
-    private fun stopScan() {
-        if (isScanning) {
-            isScanning = false
-            try {
-                unregisterReceiver(scanReceiver)
-            } catch (e: IllegalArgumentException) {
-                e.printStackTrace()
-                Toast.makeText(this, "Receiver not registered", Toast.LENGTH_SHORT).show()
-            }
-
-            handler.removeCallbacks(scanRunnable)
-        }
+    private fun stopScanService() {
+        val serviceIntent = Intent(this, WiFiScanService::class.java)
+        stopService(serviceIntent)
     }
 
     private fun setVolume(percent: Int) {
@@ -293,25 +253,17 @@ class MainActivity : ComponentActivity() {
 
                 // Modern buttons with rounded corners and padding
                 Button(
-                    onClick = { startScan() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    shape = RoundedCornerShape(12.dp), // Rounded button corners
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6200EE)) // Accent color for buttons
+                    onClick = { startScanService() },
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Start Scanning", color = Color.White)
+                    Text("Start Scanning")
                 }
 
                 Button(
-                    onClick = { stopScan() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    shape = RoundedCornerShape(12.dp), // Rounded button corners
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Gray) // Neutral button color
+                    onClick = { stopScanService() },
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Stop Scanning", color = Color.White)
+                    Text("Stop Scanning")
                 }
             }
         }
@@ -323,7 +275,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        stopScan()
+        stopScanService()
     }
 
         companion object {
