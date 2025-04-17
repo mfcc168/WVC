@@ -212,33 +212,53 @@ class MainActivity : ComponentActivity() {
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-                // Header section
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF6200EE)),
-                    shape = RoundedCornerShape(20.dp),
-                    modifier = Modifier.fillMaxWidth()
+// Redesigned Header
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .shadow(4.dp, shape = RoundedCornerShape(16.dp))
+                        .background(
+                            color = Color.White,
+                            shape = RoundedCornerShape(16.dp)
+                        )
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(
+                    // Icon or visual accent
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow, // You can swap this with a better icon
+                        contentDescription = null,
+                        tint = Color(0xFF6200EE),
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp)
-                    ) {
+                            .size(48.dp)
+                            .background(Color(0x116200EE), CircleShape)
+                            .padding(8.dp)
+                    )
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    // Text
+                    Column {
                         Text(
-                            "Smart Volume Control",
-                            style = MaterialTheme.typography.headlineSmall.copy(
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold
+                            text = "Smart Volume Control",
+                            style = TextStyle(
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF222222)
                             )
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            "Automatically adjust volume based on your WiFi location.",
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                color = Color.White
+                            text = "Adjusts volume based on your location",
+                            style = TextStyle(
+                                fontSize = 14.sp,
+                                color = Color(0xFF666666)
                             )
                         )
                     }
                 }
+
 
                 // SSID Input
                 OutlinedTextField(
@@ -251,7 +271,9 @@ class MainActivity : ComponentActivity() {
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Color(0xFF6200EE),
-                        unfocusedBorderColor = Color.Gray
+                        unfocusedBorderColor = Color.Gray,
+                        focusedTextColor = Color(0xFF333333),
+                        unfocusedTextColor = Color(0xFF333333)
                     )
                 )
 
@@ -289,6 +311,10 @@ class MainActivity : ComponentActivity() {
                         Text("${outdoorVolume.value}%", modifier = Modifier.align(Alignment.End))
                     }
                 }
+
+
+
+
 
                 Column(
                     modifier = Modifier
