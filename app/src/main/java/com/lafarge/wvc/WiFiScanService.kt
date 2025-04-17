@@ -23,7 +23,9 @@ class WiFiScanService : Service() {
     private var isScanning = false
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
     private var homeSSID: String = ""
-
+    private var indoorVolumePercent: Int = 50
+    private var outdoorVolumePercent: Int = 100
+    private var lastIsIndoor: Boolean? = null
 
     private val scanRunnable = object : Runnable {
         override fun run() {
@@ -40,6 +42,8 @@ class WiFiScanService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         homeSSID = intent?.getStringExtra("HOME_SSID") ?: ""
+        indoorVolumePercent = intent?.getIntExtra("INDOOR_VOLUME", 50) ?: 50
+        outdoorVolumePercent = intent?.getIntExtra("OUTDOOR_VOLUME", 100) ?: 100
         return START_STICKY
     }
 
@@ -55,6 +59,11 @@ class WiFiScanService : Service() {
         startForeground(1, createNotification("Scanning Wi-Fi..."))
 
         isScanning = true
+        try {
+            wifiManager.startScan()
+        } catch (e: SecurityException) {
+            e.printStackTrace()
+        }
         handler.post(scanRunnable)
     }
 
@@ -96,15 +105,20 @@ class WiFiScanService : Service() {
 
                 val isIndoor = results.any { it.SSID == homeSSID }
 
-                val volumePercent = if (isIndoor) 50 else 100
+                val volumePercent = if (isIndoor) indoorVolumePercent  else outdoorVolumePercent
                 setVolume(volumePercent)
 
-                val message = if (isIndoor)
-                    "You are indoor, setting volume to $volumePercent%"
-                else
-                    "You are outdoor, setting volume to $volumePercent%"
+                // Only show notification if state changed
+                if (lastIsIndoor == null || isIndoor != lastIsIndoor) {
+                    lastIsIndoor = isIndoor
 
-                showNotification(message)
+                    val message = if (isIndoor)
+                        "You are indoor, setting volume to $volumePercent%"
+                    else
+                        "You are outdoor, setting volume to $volumePercent%"
+
+                    showNotification(message)
+                }
             }
         }
 

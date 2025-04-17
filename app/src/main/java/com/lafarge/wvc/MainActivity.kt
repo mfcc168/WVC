@@ -12,9 +12,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -67,6 +70,8 @@ class MainActivity : ComponentActivity() {
     private fun startScanService() {
         val serviceIntent = Intent(this, WiFiScanService::class.java).apply {
             putExtra("HOME_SSID", currentSSID.value)
+            putExtra("INDOOR_VOLUME", indoorVolume.value)
+            putExtra("OUTDOOR_VOLUME", outdoorVolume.value)
         }
         startService(serviceIntent)
     }
@@ -151,13 +156,46 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                Button(onClick = { startScanService() }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Start Scanning")
+// Toggle scanning button with animation
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Button(
+                        onClick = {
+                            if (isScanning.value) {
+                                stopScanService()
+                            } else {
+                                startScanService()
+                            }
+                            isScanning.value = !isScanning.value
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                    ) {
+                        if (!isScanning.value) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = "Start Scanning",
+                                tint = Color.Black
+                            )
+                        } else {
+                            CircularProgressIndicator(
+                                color = Color.Black,
+                                strokeWidth = 3.dp,
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .padding(2.dp)
+                            )
+                        }
+                    }
+
+
                 }
 
-                Button(onClick = { stopScanService() }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Stop Scanning")
-                }
             }
         }
     }
@@ -171,5 +209,6 @@ class MainActivity : ComponentActivity() {
         var currentSSID = mutableStateOf("")
         var indoorVolume = mutableStateOf(50)
         var outdoorVolume = mutableStateOf(100)
+        var isScanning = mutableStateOf(false)
     }
 }
