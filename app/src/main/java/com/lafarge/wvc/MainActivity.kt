@@ -3,6 +3,7 @@ package com.lafarge.wvc
 import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.widget.Toast
@@ -43,6 +44,7 @@ import com.lafarge.wvc.ui.theme.WVCTheme
 class MainActivity : ComponentActivity() {
 
     private lateinit var context: Context
+    private lateinit var sharedPrefs: SharedPreferences
 
     private val requestPermissionsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -57,7 +59,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         context = this
-
+        sharedPrefs = getSharedPreferences("wifi_volume_prefs", Context.MODE_PRIVATE)
         requestPermissions()
         createNotificationChannel()
 
@@ -83,8 +85,6 @@ class MainActivity : ComponentActivity() {
         if (currentSSID.value.isNotEmpty()) {
             val serviceIntent = Intent(this, WiFiScanService::class.java).apply {
                 putExtra("HOME_SSID", currentSSID.value)
-                putExtra("INDOOR_VOLUME", indoorVolume.value)
-                putExtra("OUTDOOR_VOLUME", outdoorVolume.value)
             }
             startService(serviceIntent)
         }
@@ -243,7 +243,10 @@ class MainActivity : ComponentActivity() {
                         Text("Indoor Volume", fontWeight = FontWeight.SemiBold)
                         Slider(
                             value = indoorVolume.value.toFloat(),
-                            onValueChange = { indoorVolume.value = it.toInt() },
+                            onValueChange = {
+                                indoorVolume.value = it.toInt()
+                                sharedPrefs.edit().putInt("INDOOR_VOLUME", it.toInt()).apply()
+                                            },
                             valueRange = 0f..100f,
                             colors = SliderDefaults.colors(
                                 activeTrackColor = Color(0xFF6200EE),
@@ -257,7 +260,10 @@ class MainActivity : ComponentActivity() {
                         Text("Outdoor Volume", fontWeight = FontWeight.SemiBold)
                         Slider(
                             value = outdoorVolume.value.toFloat(),
-                            onValueChange = { outdoorVolume.value = it.toInt() },
+                            onValueChange = {
+                                outdoorVolume.value = it.toInt()
+                                sharedPrefs.edit().putInt("OUTDOOR_VOLUME", it.toInt()).apply()
+                                            },
                             valueRange = 0f..100f,
                             colors = SliderDefaults.colors(
                                 activeTrackColor = Color(0xFF03DAC6),

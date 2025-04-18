@@ -23,9 +23,8 @@ class WiFiScanService : Service() {
     private var isScanning = false
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
     private var homeSSID: String = ""
-    private var indoorVolumePercent: Int = 50
-    private var outdoorVolumePercent: Int = 100
     private var lastIsIndoor: Boolean? = null
+    private lateinit var prefs: android.content.SharedPreferences
 
     private val scanRunnable = object : Runnable {
         override fun run() {
@@ -42,14 +41,12 @@ class WiFiScanService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         homeSSID = intent?.getStringExtra("HOME_SSID") ?: ""
-        indoorVolumePercent = intent?.getIntExtra("INDOOR_VOLUME", 50) ?: 50
-        outdoorVolumePercent = intent?.getIntExtra("OUTDOOR_VOLUME", 100) ?: 100
         return START_STICKY
     }
 
     override fun onCreate() {
         super.onCreate()
-
+        prefs = getSharedPreferences("wifi_volume_prefs", MODE_PRIVATE)
         wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
@@ -105,6 +102,8 @@ class WiFiScanService : Service() {
 
                 val isIndoor = results.any { it.SSID == homeSSID }
 
+                val indoorVolumePercent = prefs.getInt("INDOOR_VOLUME", 50)
+                val outdoorVolumePercent = prefs.getInt("OUTDOOR_VOLUME", 100)
                 val volumePercent = if (isIndoor) indoorVolumePercent  else outdoorVolumePercent
                 setVolume(volumePercent)
 
