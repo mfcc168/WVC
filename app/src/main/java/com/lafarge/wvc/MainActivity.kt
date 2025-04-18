@@ -80,12 +80,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startScanService() {
-        val serviceIntent = Intent(this, WiFiScanService::class.java).apply {
-            putExtra("HOME_SSID", currentSSID.value)
-            putExtra("INDOOR_VOLUME", indoorVolume.value)
-            putExtra("OUTDOOR_VOLUME", outdoorVolume.value)
+        if (currentSSID.value.isNotEmpty()) {
+            val serviceIntent = Intent(this, WiFiScanService::class.java).apply {
+                putExtra("HOME_SSID", currentSSID.value)
+                putExtra("INDOOR_VOLUME", indoorVolume.value)
+                putExtra("OUTDOOR_VOLUME", outdoorVolume.value)
+            }
+            startService(serviceIntent)
         }
-        startService(serviceIntent)
     }
 
     private fun stopScanService() {
@@ -206,59 +208,13 @@ class MainActivity : ComponentActivity() {
             modifier = Modifier.fillMaxSize(),
             color = Color(0xFFF0F2F5) // soft background color
         ) {
+
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(16.dp),
+                    .padding(top = 32.dp, start = 16.dp, end = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-// Redesigned Header
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                        .shadow(4.dp, shape = RoundedCornerShape(16.dp))
-                        .background(
-                            color = Color.White,
-                            shape = RoundedCornerShape(16.dp)
-                        )
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Icon or visual accent
-                    Icon(
-                        imageVector = Icons.Default.PlayArrow, // You can swap this with a better icon
-                        contentDescription = null,
-                        tint = Color(0xFF6200EE),
-                        modifier = Modifier
-                            .size(48.dp)
-                            .background(Color(0x116200EE), CircleShape)
-                            .padding(8.dp)
-                    )
-
-                    Spacer(modifier = Modifier.width(16.dp))
-
-                    // Text
-                    Column {
-                        Text(
-                            text = "Smart Volume Control",
-                            style = TextStyle(
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF222222)
-                            )
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Adjusts volume based on your location",
-                            style = TextStyle(
-                                fontSize = 14.sp,
-                                color = Color(0xFF666666)
-                            )
-                        )
-                    }
-                }
-
 
                 // SSID Input
                 OutlinedTextField(
@@ -325,8 +281,12 @@ class MainActivity : ComponentActivity() {
                     DonutToggleButton(
                         isScanning = isScanning.value,
                         onToggle = {
-                            if (isScanning.value) stopScanService() else startScanService()
-                            isScanning.value = !isScanning.value
+                            if (currentSSID.value.isNotEmpty()) {
+                                if (isScanning.value) stopScanService() else startScanService()
+                                isScanning.value = !isScanning.value
+                            } else {
+                                Toast.makeText(context, "Please enter your Home WiFi SSID", Toast.LENGTH_SHORT).show()
+                            }
                         }
                     )
                     Spacer(modifier = Modifier.height(8.dp))
