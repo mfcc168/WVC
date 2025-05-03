@@ -19,8 +19,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
@@ -33,10 +35,8 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationManagerCompat
 import com.lafarge.wvc.ui.theme.WVCTheme
@@ -110,7 +110,6 @@ class MainActivity : ComponentActivity() {
     ) {
         val transition = rememberInfiniteTransition(label = "pulse")
 
-        // Pulsing animation
         val pulseScale by transition.animateFloat(
             initialValue = 1f,
             targetValue = 1.1f,
@@ -121,7 +120,6 @@ class MainActivity : ComponentActivity() {
             label = "scale"
         )
 
-        // Glow animation
         val glowAlpha by transition.animateFloat(
             initialValue = 0.3f,
             targetValue = 0.6f,
@@ -137,10 +135,8 @@ class MainActivity : ComponentActivity() {
 
         Box(
             contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .size(140.dp)
+            modifier = Modifier.size(140.dp)
         ) {
-            // Glowing aura
             Box(
                 modifier = Modifier
                     .size(140.dp)
@@ -158,7 +154,6 @@ class MainActivity : ComponentActivity() {
                     )
             )
 
-            // Donut button
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
@@ -198,31 +193,71 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @Composable
+    fun VolumeControlCard(
+        title: String,
+        indoorVolume: Int,
+        outdoorVolume: Int,
+        onIndoorChange: (Int) -> Unit,
+        onOutdoorChange: (Int) -> Unit
+    ) {
+        Card(
+            elevation = CardDefaults.cardElevation(6.dp),
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(title, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall)
 
+                Spacer(modifier = Modifier.height(8.dp))
 
+                Text("Indoor Volume", fontWeight = FontWeight.Medium)
+                Slider(
+                    value = indoorVolume.toFloat(),
+                    onValueChange = { onIndoorChange(it.toInt()) },
+                    valueRange = 0f..100f,
+                    colors = SliderDefaults.colors(
+                        activeTrackColor = Color(0xFF6200EE),
+                        thumbColor = Color(0xFF6200EE)
+                    )
+                )
+                Text("${indoorVolume}%", modifier = Modifier.align(Alignment.End))
 
+                Spacer(modifier = Modifier.height(12.dp))
 
+                Text("Outdoor Volume", fontWeight = FontWeight.Medium)
+                Slider(
+                    value = outdoorVolume.toFloat(),
+                    onValueChange = { onOutdoorChange(it.toInt()) },
+                    valueRange = 0f..100f,
+                    colors = SliderDefaults.colors(
+                        activeTrackColor = Color(0xFF03DAC6),
+                        thumbColor = Color(0xFF03DAC6)
+                    )
+                )
+                Text("${outdoorVolume}%", modifier = Modifier.align(Alignment.End))
+            }
+        }
+    }
     @Composable
     fun MainScreen() {
         Surface(
             modifier = Modifier.fillMaxSize(),
-            color = Color(0xFFF0F2F5) // soft background color
+            color = Color(0xFFF0F2F5)
         ) {
-
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = 32.dp, start = 16.dp, end = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-
                 // SSID Input
                 OutlinedTextField(
                     value = currentSSID.value,
                     onValueChange = { currentSSID.value = it },
                     label = { Text("Home WiFi SSID") },
-                    modifier = Modifier
-                        .fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
@@ -233,55 +268,96 @@ class MainActivity : ComponentActivity() {
                     )
                 )
 
-                // Volume controls grouped
-                Card(
-                    elevation = CardDefaults.cardElevation(6.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Indoor Volume", fontWeight = FontWeight.SemiBold)
-                        Slider(
-                            value = indoorVolume.value.toFloat(),
-                            onValueChange = {
-                                indoorVolume.value = it.toInt()
-                                sharedPrefs.edit().putInt("INDOOR_VOLUME", it.toInt()).apply()
-                                            },
-                            valueRange = 0f..100f,
-                            colors = SliderDefaults.colors(
-                                activeTrackColor = Color(0xFF6200EE),
-                                thumbColor = Color(0xFF6200EE)
-                            )
-                        )
-                        Text("${indoorVolume.value}%", modifier = Modifier.align(Alignment.End))
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Text("Outdoor Volume", fontWeight = FontWeight.SemiBold)
-                        Slider(
-                            value = outdoorVolume.value.toFloat(),
-                            onValueChange = {
-                                outdoorVolume.value = it.toInt()
-                                sharedPrefs.edit().putInt("OUTDOOR_VOLUME", it.toInt()).apply()
-                                            },
-                            valueRange = 0f..100f,
-                            colors = SliderDefaults.colors(
-                                activeTrackColor = Color(0xFF03DAC6),
-                                thumbColor = Color(0xFF03DAC6)
-                            )
-                        )
-                        Text("${outdoorVolume.value}%", modifier = Modifier.align(Alignment.End))
+                // Volume Control Cards
+                VolumeControlCard(
+                    title = "Media Volume",
+                    indoorVolume = mediaIndoorVolume.value,
+                    outdoorVolume = mediaOutdoorVolume.value,
+                    onIndoorChange = {
+                        mediaIndoorVolume.value = it
+                        sharedPrefs.edit().putInt("MEDIA_INDOOR_VOLUME", it).apply()
+                    },
+                    onOutdoorChange = {
+                        mediaOutdoorVolume.value = it
+                        sharedPrefs.edit().putInt("MEDIA_OUTDOOR_VOLUME", it).apply()
                     }
-                }
+                )
 
+                VolumeControlCard(
+                    title = "Ringtone Volume",
+                    indoorVolume = ringtoneIndoorVolume.value,
+                    outdoorVolume = ringtoneOutdoorVolume.value,
+                    onIndoorChange = {
+                        ringtoneIndoorVolume.value = it
+                        sharedPrefs.edit().putInt("RINGTONE_INDOOR_VOLUME", it).apply()
+                    },
+                    onOutdoorChange = {
+                        ringtoneOutdoorVolume.value = it
+                        sharedPrefs.edit().putInt("RINGTONE_OUTDOOR_VOLUME", it).apply()
+                    }
+                )
 
+                VolumeControlCard(
+                    title = "Notification Volume",
+                    indoorVolume = notificationIndoorVolume.value,
+                    outdoorVolume = notificationOutdoorVolume.value,
+                    onIndoorChange = {
+                        notificationIndoorVolume.value = it
+                        sharedPrefs.edit().putInt("NOTIFICATION_INDOOR_VOLUME", it).apply()
+                    },
+                    onOutdoorChange = {
+                        notificationOutdoorVolume.value = it
+                        sharedPrefs.edit().putInt("NOTIFICATION_OUTDOOR_VOLUME", it).apply()
+                    }
+                )
 
+                VolumeControlCard(
+                    title = "System Volume",
+                    indoorVolume = systemIndoorVolume.value,
+                    outdoorVolume = systemOutdoorVolume.value,
+                    onIndoorChange = {
+                        systemIndoorVolume.value = it
+                        sharedPrefs.edit().putInt("SYSTEM_INDOOR_VOLUME", it).apply()
+                    },
+                    onOutdoorChange = {
+                        systemOutdoorVolume.value = it
+                        sharedPrefs.edit().putInt("SYSTEM_OUTDOOR_VOLUME", it).apply()
+                    }
+                )
 
+                VolumeControlCard(
+                    title = "Call Volume",
+                    indoorVolume = callIndoorVolume.value,
+                    outdoorVolume = callOutdoorVolume.value,
+                    onIndoorChange = {
+                        callIndoorVolume.value = it
+                        sharedPrefs.edit().putInt("CALL_INDOOR_VOLUME", it).apply()
+                    },
+                    onOutdoorChange = {
+                        callOutdoorVolume.value = it
+                        sharedPrefs.edit().putInt("CALL_OUTDOOR_VOLUME", it).apply()
+                    }
+                )
 
+                VolumeControlCard(
+                    title = "Alarm Volume",
+                    indoorVolume = alarmIndoorVolume.value,
+                    outdoorVolume = alarmOutdoorVolume.value,
+                    onIndoorChange = {
+                        alarmIndoorVolume.value = it
+                        sharedPrefs.edit().putInt("ALARM_INDOOR_VOLUME", it).apply()
+                    },
+                    onOutdoorChange = {
+                        alarmOutdoorVolume.value = it
+                        sharedPrefs.edit().putInt("ALARM_OUTDOOR_VOLUME", it).apply()
+                    }
+                )
+
+                // Scan Button
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 16.dp),
+                        .padding(top = 16.dp, bottom = 32.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     DonutToggleButton(
@@ -302,11 +378,9 @@ class MainActivity : ComponentActivity() {
                         color = Color.Gray
                     )
                 }
-
             }
         }
     }
-
 
     override fun onDestroy() {
         super.onDestroy()
@@ -315,8 +389,18 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         var currentSSID = mutableStateOf("")
-        var indoorVolume = mutableStateOf(50)
-        var outdoorVolume = mutableStateOf(100)
+        var mediaIndoorVolume = mutableStateOf(50)
+        var mediaOutdoorVolume = mutableStateOf(100)
+        var ringtoneIndoorVolume = mutableStateOf(50)
+        var ringtoneOutdoorVolume = mutableStateOf(100)
+        var notificationIndoorVolume = mutableStateOf(50)
+        var notificationOutdoorVolume = mutableStateOf(100)
+        var systemIndoorVolume = mutableStateOf(50)
+        var systemOutdoorVolume = mutableStateOf(100)
+        var callIndoorVolume = mutableStateOf(50)
+        var callOutdoorVolume = mutableStateOf(100)
+        var alarmIndoorVolume = mutableStateOf(50)
+        var alarmOutdoorVolume = mutableStateOf(100)
         var isScanning = mutableStateOf(false)
     }
 }

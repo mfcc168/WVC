@@ -82,7 +82,6 @@ class WiFiScanService : Service() {
     }
 
     private fun setupReceivers() {
-        // Receiver for scan results
         scanReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 try {
@@ -97,14 +96,13 @@ class WiFiScanService : Service() {
         }
         registerReceiver(scanReceiver, IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION))
 
-        // Receiver for Wi-Fi state changes
         wifiStateReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 val action = intent?.action
                 if (action == WifiManager.WIFI_STATE_CHANGED_ACTION) {
                     val wifiState = intent.getIntExtra(WifiManager.EXTRA_WIFI_STATE, WifiManager.WIFI_STATE_UNKNOWN)
                     if (wifiState == WifiManager.WIFI_STATE_ENABLED) {
-                        startWifiScan() // Wi-Fi turned on, start scan
+                        startWifiScan()
                     }
                 }
             }
@@ -117,7 +115,6 @@ class WiFiScanService : Service() {
             val success = wifiManager.startScan()
             if (!success) {
                 // Scan failed (could be throttled or Wi-Fi off)
-                // You could retry or just wait for next scan
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -127,20 +124,30 @@ class WiFiScanService : Service() {
     private fun handleScanResults(results: List<ScanResult>) {
         val isIndoor = results.any { it.SSID == homeSSID }
 
-        val indoorVolumePercent = prefs.getInt("INDOOR_VOLUME", 50)
-        val outdoorVolumePercent = prefs.getInt("OUTDOOR_VOLUME", 100)
-
-        val targetVolumePercent = if (isIndoor) indoorVolumePercent else outdoorVolumePercent
-
-        setVolume(targetVolumePercent)
+        if (isIndoor) {
+            // Indoor volumes
+            setStreamVolume(AudioManager.STREAM_MUSIC, prefs.getInt("MEDIA_INDOOR_VOLUME", 50))
+            setStreamVolume(AudioManager.STREAM_RING, prefs.getInt("RINGTONE_INDOOR_VOLUME", 50))
+            setStreamVolume(AudioManager.STREAM_NOTIFICATION, prefs.getInt("NOTIFICATION_INDOOR_VOLUME", 50))
+            setStreamVolume(AudioManager.STREAM_SYSTEM, prefs.getInt("SYSTEM_INDOOR_VOLUME", 50))
+            setStreamVolume(AudioManager.STREAM_VOICE_CALL, prefs.getInt("CALL_INDOOR_VOLUME", 50))
+            setStreamVolume(AudioManager.STREAM_ALARM, prefs.getInt("ALARM_INDOOR_VOLUME", 50))
+        } else {
+            // Outdoor volumes
+            setStreamVolume(AudioManager.STREAM_MUSIC, prefs.getInt("MEDIA_OUTDOOR_VOLUME", 100))
+            setStreamVolume(AudioManager.STREAM_RING, prefs.getInt("RINGTONE_OUTDOOR_VOLUME", 100))
+            setStreamVolume(AudioManager.STREAM_NOTIFICATION, prefs.getInt("NOTIFICATION_OUTDOOR_VOLUME", 100))
+            setStreamVolume(AudioManager.STREAM_SYSTEM, prefs.getInt("SYSTEM_OUTDOOR_VOLUME", 100))
+            setStreamVolume(AudioManager.STREAM_VOICE_CALL, prefs.getInt("CALL_OUTDOOR_VOLUME", 100))
+            setStreamVolume(AudioManager.STREAM_ALARM, prefs.getInt("ALARM_OUTDOOR_VOLUME", 100))
+        }
     }
 
-    private fun setVolume(percent: Int) {
+    private fun setStreamVolume(streamType: Int, percent: Int) {
         try {
-            val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+            val maxVolume = audioManager.getStreamMaxVolume(streamType)
             val targetVolume = (percent / 100.0 * maxVolume).toInt()
-
-            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVolume, 0)
+            audioManager.setStreamVolume(streamType, targetVolume, 0)
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -155,7 +162,7 @@ class WiFiScanService : Service() {
             unregisterReceiver(scanReceiver)
             unregisterReceiver(wifiStateReceiver)
         } catch (e: Exception) {
-            e.printStackTrace() // In case receiver was already unregistered
+            e.printStackTrace()
         }
     }
 }
