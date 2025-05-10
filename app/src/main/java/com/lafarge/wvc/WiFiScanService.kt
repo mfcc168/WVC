@@ -1,8 +1,10 @@
 package com.lafarge.wvc
 
+import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -12,6 +14,7 @@ import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.net.wifi.ScanResult
 import android.net.wifi.WifiManager
+import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -57,11 +60,41 @@ class WiFiScanService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        homeSSID = intent?.getStringExtra("HOME_SSID") ?: ""
-        return START_STICKY
+        homeSSID = intent?.getStringExtra("HOME_SSID") ?:
+                prefs.getString("HOME_SSID", "") ?: ""
+        return START_REDELIVER_INTENT
     }
-
     override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        val restartIntent = Intent(this, WiFiScanService::class.java).apply {
+            putExtra("HOME_SSID", homeSSID)
+        }
+
+        val pendingIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            PendingIntent.getService(
+                this,
+                0,
+                restartIntent,
+                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+            )
+        } else {
+            PendingIntent.getService(
+                this,
+                0,
+                restartIntent,
+                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
+
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        alarmManager.set(
+            AlarmManager.RTC_WAKEUP,
+            System.currentTimeMillis() + 1000, // 1 second delay
+            pendingIntent
+        )
+    }
 
     private fun createNotificationChannel() {
         val channel = NotificationChannel(
@@ -75,9 +108,12 @@ class WiFiScanService : Service() {
 
     private fun createNotification(contentText: String): Notification {
         return NotificationCompat.Builder(this, "wifi_volume_channel")
-            .setContentTitle("Wi-Fi Scan Service")
+            .setContentTitle("Wi-Fi Volume Control Active")
             .setContentText(contentText)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true)
+            .setShowWhen(false)
             .build()
     }
 

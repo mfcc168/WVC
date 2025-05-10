@@ -60,6 +60,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         context = this
         sharedPrefs = getSharedPreferences("wifi_volume_prefs", Context.MODE_PRIVATE)
+
+        loadSettings()
+
         requestPermissions()
         createNotificationChannel()
 
@@ -68,6 +71,23 @@ class MainActivity : ComponentActivity() {
                 MainScreen()
             }
         }
+    }
+
+
+    private fun loadSettings() {
+        currentSSID.value = sharedPrefs.getString("HOME_SSID", "") ?: ""
+        mediaIndoorVolume.value = sharedPrefs.getInt("MEDIA_INDOOR_VOLUME", 50)
+        mediaOutdoorVolume.value = sharedPrefs.getInt("MEDIA_OUTDOOR_VOLUME", 100)
+        ringtoneIndoorVolume.value = sharedPrefs.getInt("RINGTONE_INDOOR_VOLUME", 50)
+        ringtoneOutdoorVolume.value = sharedPrefs.getInt("RINGTONE_OUTDOOR_VOLUME", 100)
+        notificationIndoorVolume.value = sharedPrefs.getInt("NOTIFICATION_INDOOR_VOLUME", 50)
+        notificationOutdoorVolume.value = sharedPrefs.getInt("NOTIFICATION_OUTDOOR_VOLUME", 100)
+        systemIndoorVolume.value = sharedPrefs.getInt("SYSTEM_INDOOR_VOLUME", 50)
+        systemOutdoorVolume.value = sharedPrefs.getInt("SYSTEM_OUTDOOR_VOLUME", 100)
+        callIndoorVolume.value = sharedPrefs.getInt("CALL_INDOOR_VOLUME", 50)
+        callOutdoorVolume.value = sharedPrefs.getInt("CALL_OUTDOOR_VOLUME", 100)
+        alarmIndoorVolume.value = sharedPrefs.getInt("ALARM_INDOOR_VOLUME", 50)
+        alarmOutdoorVolume.value = sharedPrefs.getInt("ALARM_OUTDOOR_VOLUME", 100)
     }
 
     private fun requestPermissions() {
@@ -80,6 +100,7 @@ class MainActivity : ComponentActivity() {
         )
         requestPermissionsLauncher.launch(permissions.toTypedArray())
     }
+
 
     private fun startScanService() {
         if (currentSSID.value.isNotEmpty()) {
@@ -102,6 +123,7 @@ class MainActivity : ComponentActivity() {
             .build()
         NotificationManagerCompat.from(this).createNotificationChannel(channel)
     }
+
 
     @Composable
     fun DonutToggleButton(
@@ -255,7 +277,10 @@ class MainActivity : ComponentActivity() {
                 // SSID Input
                 OutlinedTextField(
                     value = currentSSID.value,
-                    onValueChange = { currentSSID.value = it },
+                    onValueChange = {
+                        currentSSID.value = it
+                        sharedPrefs.edit().putString("HOME_SSID", it).apply()
+                    },
                     label = { Text("Home WiFi SSID") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
