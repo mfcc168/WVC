@@ -158,24 +158,53 @@ class WiFiScanService : Service() {
     }
 
     private fun handleScanResults(results: List<ScanResult>) {
-        val isIndoor = results.any { it.SSID == homeSSID }
+        val profileManager = ProfileStorageManager(this)
+        val activeProfile = profileManager.getActiveProfile()
+        if (activeProfile == null) {
+            // Fallback to legacy behavior
+            handleLegacyScanResults(results)
+            return
+        }
+        val isIndoor = results.any { it.SSID == activeProfile.ssid }
+        val volumes = activeProfile.volumes
 
         if (isIndoor) {
             // Indoor volumes
-            setStreamVolume(AudioManager.STREAM_MUSIC, prefs.getInt("MEDIA_INDOOR_VOLUME", 50))
-            setStreamVolume(AudioManager.STREAM_RING, prefs.getInt("RINGTONE_INDOOR_VOLUME", 50))
-            setStreamVolume(AudioManager.STREAM_NOTIFICATION, prefs.getInt("NOTIFICATION_INDOOR_VOLUME", 50))
-            setStreamVolume(AudioManager.STREAM_SYSTEM, prefs.getInt("SYSTEM_INDOOR_VOLUME", 50))
-            setStreamVolume(AudioManager.STREAM_VOICE_CALL, prefs.getInt("CALL_INDOOR_VOLUME", 50))
-            setStreamVolume(AudioManager.STREAM_ALARM, prefs.getInt("ALARM_INDOOR_VOLUME", 50))
+//            setStreamVolume(AudioManager.STREAM_MUSIC, volumes[VolumeProfile.MEDIA_INDOOR] ?: 50)
+            setStreamVolume(AudioManager.STREAM_RING, volumes[VolumeProfile.RINGTONE_INDOOR] ?: 50)
+            setStreamVolume(AudioManager.STREAM_NOTIFICATION, volumes[VolumeProfile.NOTIFICATION_INDOOR] ?: 50)
+//            setStreamVolume(AudioManager.STREAM_SYSTEM, volumes[VolumeProfile.SYSTEM_INDOOR] ?: 50)
+//            setStreamVolume(AudioManager.STREAM_VOICE_CALL, volumes[VolumeProfile.CALL_INDOOR] ?: 50)
+//            setStreamVolume(AudioManager.STREAM_ALARM, volumes[VolumeProfile.ALARM_INDOOR] ?: 50)
         } else {
             // Outdoor volumes
-            setStreamVolume(AudioManager.STREAM_MUSIC, prefs.getInt("MEDIA_OUTDOOR_VOLUME", 100))
+//            setStreamVolume(AudioManager.STREAM_MUSIC, volumes[VolumeProfile.MEDIA_OUTDOOR] ?: 100)
+            setStreamVolume(AudioManager.STREAM_RING, volumes[VolumeProfile.RINGTONE_OUTDOOR] ?: 100)
+            setStreamVolume(AudioManager.STREAM_NOTIFICATION, volumes[VolumeProfile.NOTIFICATION_OUTDOOR] ?: 100)
+//            setStreamVolume(AudioManager.STREAM_SYSTEM, volumes[VolumeProfile.SYSTEM_OUTDOOR] ?: 100)
+//            setStreamVolume(AudioManager.STREAM_VOICE_CALL, volumes[VolumeProfile.CALL_OUTDOOR] ?: 100)
+//            setStreamVolume(AudioManager.STREAM_ALARM, volumes[VolumeProfile.ALARM_OUTDOOR] ?: 100)
+        }
+    }
+
+    private fun handleLegacyScanResults(results: List<ScanResult>) {
+        val isIndoor = results.any { it.SSID == homeSSID }
+        val prefs = getSharedPreferences("wifi_volume_prefs", MODE_PRIVATE)
+
+        if (isIndoor) {
+//            setStreamVolume(AudioManager.STREAM_MUSIC, prefs.getInt("MEDIA_INDOOR_VOLUME", 50))
+            setStreamVolume(AudioManager.STREAM_RING, prefs.getInt("RINGTONE_INDOOR_VOLUME", 50))
+            setStreamVolume(AudioManager.STREAM_NOTIFICATION, prefs.getInt("NOTIFICATION_INDOOR_VOLUME", 50))
+//            setStreamVolume(AudioManager.STREAM_SYSTEM, prefs.getInt("SYSTEM_INDOOR_VOLUME", 50))
+//            setStreamVolume(AudioManager.STREAM_VOICE_CALL, prefs.getInt("CALL_INDOOR_VOLUME", 50))
+//            setStreamVolume(AudioManager.STREAM_ALARM, prefs.getInt("ALARM_INDOOR_VOLUME", 50))
+        } else {
+//            setStreamVolume(AudioManager.STREAM_MUSIC, prefs.getInt("MEDIA_OUTDOOR_VOLUME", 100))
             setStreamVolume(AudioManager.STREAM_RING, prefs.getInt("RINGTONE_OUTDOOR_VOLUME", 100))
             setStreamVolume(AudioManager.STREAM_NOTIFICATION, prefs.getInt("NOTIFICATION_OUTDOOR_VOLUME", 100))
-            setStreamVolume(AudioManager.STREAM_SYSTEM, prefs.getInt("SYSTEM_OUTDOOR_VOLUME", 100))
-            setStreamVolume(AudioManager.STREAM_VOICE_CALL, prefs.getInt("CALL_OUTDOOR_VOLUME", 100))
-            setStreamVolume(AudioManager.STREAM_ALARM, prefs.getInt("ALARM_OUTDOOR_VOLUME", 100))
+//            setStreamVolume(AudioManager.STREAM_SYSTEM, prefs.getInt("SYSTEM_OUTDOOR_VOLUME", 100))
+//            setStreamVolume(AudioManager.STREAM_VOICE_CALL, prefs.getInt("CALL_OUTDOOR_VOLUME", 100))
+//            setStreamVolume(AudioManager.STREAM_ALARM, prefs.getInt("ALARM_OUTDOOR_VOLUME", 100))
         }
     }
 

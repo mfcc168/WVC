@@ -19,16 +19,22 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -45,6 +51,10 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var context: Context
     private lateinit var sharedPrefs: SharedPreferences
+    private lateinit var profileManager: ProfileStorageManager
+    private val profileListState = mutableStateOf<List<VolumeProfile>>(emptyList())
+    private val selectedProfileName = mutableStateOf("")
+    private val showDeleteDialog = mutableStateOf(false)
 
     private val requestPermissionsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -60,8 +70,15 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         context = this
         sharedPrefs = getSharedPreferences("wifi_volume_prefs", Context.MODE_PRIVATE)
+        profileManager = ProfileStorageManager(this)
 
-        loadSettings()
+        // Load profiles first
+        loadProfiles()
+
+        // If no active profile, load from shared prefs (legacy support)
+        if (selectedProfileName.value.isEmpty()) {
+            loadSettings()
+        }
 
         requestPermissions()
         createNotificationChannel()
@@ -76,18 +93,18 @@ class MainActivity : ComponentActivity() {
 
     private fun loadSettings() {
         currentSSID.value = sharedPrefs.getString("HOME_SSID", "") ?: ""
-        mediaIndoorVolume.value = sharedPrefs.getInt("MEDIA_INDOOR_VOLUME", 50)
-        mediaOutdoorVolume.value = sharedPrefs.getInt("MEDIA_OUTDOOR_VOLUME", 100)
+//        mediaIndoorVolume.value = sharedPrefs.getInt("MEDIA_INDOOR_VOLUME", 50)
+//        mediaOutdoorVolume.value = sharedPrefs.getInt("MEDIA_OUTDOOR_VOLUME", 100)
         ringtoneIndoorVolume.value = sharedPrefs.getInt("RINGTONE_INDOOR_VOLUME", 50)
         ringtoneOutdoorVolume.value = sharedPrefs.getInt("RINGTONE_OUTDOOR_VOLUME", 100)
         notificationIndoorVolume.value = sharedPrefs.getInt("NOTIFICATION_INDOOR_VOLUME", 50)
         notificationOutdoorVolume.value = sharedPrefs.getInt("NOTIFICATION_OUTDOOR_VOLUME", 100)
-        systemIndoorVolume.value = sharedPrefs.getInt("SYSTEM_INDOOR_VOLUME", 50)
-        systemOutdoorVolume.value = sharedPrefs.getInt("SYSTEM_OUTDOOR_VOLUME", 100)
-        callIndoorVolume.value = sharedPrefs.getInt("CALL_INDOOR_VOLUME", 50)
-        callOutdoorVolume.value = sharedPrefs.getInt("CALL_OUTDOOR_VOLUME", 100)
-        alarmIndoorVolume.value = sharedPrefs.getInt("ALARM_INDOOR_VOLUME", 50)
-        alarmOutdoorVolume.value = sharedPrefs.getInt("ALARM_OUTDOOR_VOLUME", 100)
+//        systemIndoorVolume.value = sharedPrefs.getInt("SYSTEM_INDOOR_VOLUME", 50)
+//        systemOutdoorVolume.value = sharedPrefs.getInt("SYSTEM_OUTDOOR_VOLUME", 100)
+//        callIndoorVolume.value = sharedPrefs.getInt("CALL_INDOOR_VOLUME", 50)
+//        callOutdoorVolume.value = sharedPrefs.getInt("CALL_OUTDOOR_VOLUME", 100)
+//        alarmIndoorVolume.value = sharedPrefs.getInt("ALARM_INDOOR_VOLUME", 50)
+//        alarmOutdoorVolume.value = sharedPrefs.getInt("ALARM_OUTDOOR_VOLUME", 100)
     }
 
     private fun requestPermissions() {
@@ -122,6 +139,287 @@ class MainActivity : ComponentActivity() {
             .setDescription("Notification for volume control by WiFi")
             .build()
         NotificationManagerCompat.from(this).createNotificationChannel(channel)
+    }
+    private fun loadProfiles() {
+        profileListState.value = profileManager.loadProfiles()
+        selectedProfileName.value = profileManager.getActiveProfileName()
+
+        if (selectedProfileName.value.isNotEmpty()) {
+            loadActiveProfileSettings()
+        }
+    }
+
+    private fun loadActiveProfileSettings() {
+        val activeProfile = profileManager.getActiveProfile()
+        activeProfile?.let { profile ->
+            currentSSID.value = profile.ssid
+            // Indoor volumes
+//            mediaIndoorVolume.value = profile.volumes[VolumeProfile.MEDIA_INDOOR] ?: 50
+            ringtoneIndoorVolume.value = profile.volumes[VolumeProfile.RINGTONE_INDOOR] ?: 50
+            notificationIndoorVolume.value = profile.volumes[VolumeProfile.NOTIFICATION_INDOOR] ?: 50
+//            systemIndoorVolume.value = profile.volumes[VolumeProfile.SYSTEM_INDOOR] ?: 50
+//            callIndoorVolume.value = profile.volumes[VolumeProfile.CALL_INDOOR] ?: 50
+//            alarmIndoorVolume.value = profile.volumes[VolumeProfile.ALARM_INDOOR] ?: 50
+
+            // Outdoor volumes
+//            mediaOutdoorVolume.value = profile.volumes[VolumeProfile.MEDIA_OUTDOOR] ?: 100
+            ringtoneOutdoorVolume.value = profile.volumes[VolumeProfile.RINGTONE_OUTDOOR] ?: 100
+            notificationOutdoorVolume.value = profile.volumes[VolumeProfile.NOTIFICATION_OUTDOOR] ?: 100
+//            systemOutdoorVolume.value = profile.volumes[VolumeProfile.SYSTEM_OUTDOOR] ?: 100
+//            callOutdoorVolume.value = profile.volumes[VolumeProfile.CALL_OUTDOOR] ?: 100
+//            alarmOutdoorVolume.value = profile.volumes[VolumeProfile.ALARM_OUTDOOR] ?: 100
+        }
+    }
+
+    private fun createNewProfile(name: String) {
+        if (profileListState.value.any { it.name == name }) {
+            Toast.makeText(this, "Profile name already exists", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val newProfile = VolumeProfile(
+            name = name,
+            ssid = currentSSID.value,
+            volumes = mapOf(
+//                VolumeProfile.MEDIA_INDOOR to mediaIndoorVolume.value,
+//                VolumeProfile.MEDIA_OUTDOOR to mediaOutdoorVolume.value,
+                VolumeProfile.RINGTONE_INDOOR to ringtoneIndoorVolume.value,
+                VolumeProfile.RINGTONE_OUTDOOR to ringtoneOutdoorVolume.value,
+                VolumeProfile.NOTIFICATION_INDOOR to notificationIndoorVolume.value,
+                VolumeProfile.NOTIFICATION_OUTDOOR to notificationOutdoorVolume.value,
+//                VolumeProfile.SYSTEM_INDOOR to systemIndoorVolume.value,
+//                VolumeProfile.SYSTEM_OUTDOOR to systemOutdoorVolume.value,
+//                VolumeProfile.CALL_INDOOR to callIndoorVolume.value,
+//                VolumeProfile.CALL_OUTDOOR to callOutdoorVolume.value,
+//                VolumeProfile.ALARM_INDOOR to alarmIndoorVolume.value,
+//                VolumeProfile.ALARM_OUTDOOR to alarmOutdoorVolume.value
+            )
+        )
+
+        val updatedProfiles = profileManager.loadProfiles().toMutableList().apply {
+            add(newProfile)
+        }
+
+        profileManager.saveProfiles(updatedProfiles)
+        profileManager.setActiveProfileName(name)
+        selectedProfileName.value = name
+        profileListState.value = updatedProfiles
+    }
+
+    private fun deleteCurrentProfile() {
+        val profileName = selectedProfileName.value
+        if (profileName.isNotEmpty()) {
+            profileManager.deleteProfile(profileName)
+            profileListState.value = profileManager.loadProfiles()
+            selectedProfileName.value = profileManager.getActiveProfileName()
+
+            // If we deleted the active profile, load default settings
+            if (selectedProfileName.value.isEmpty()) {
+                loadSettings()
+            }
+        }
+    }
+    private fun updateActiveProfileSsid(newSsid: String) {
+        val activeProfile = profileManager.getActiveProfile() ?: return
+        val updatedProfile = activeProfile.copy(ssid = newSsid)
+
+        val updatedProfiles = profileManager.loadProfiles().map {
+            if (it.name == activeProfile.name) updatedProfile else it
+        }
+
+        profileManager.saveProfiles(updatedProfiles)
+        profileListState.value = updatedProfiles
+    }
+
+    private fun saveCurrentSettingsToProfile() {
+        val activeProfile = profileManager.getActiveProfile() ?: return
+
+        val updatedProfile = activeProfile.copy(
+            volumes = mapOf(
+//                VolumeProfile.MEDIA_INDOOR to mediaIndoorVolume.value,
+//                VolumeProfile.MEDIA_OUTDOOR to mediaOutdoorVolume.value,
+                VolumeProfile.RINGTONE_INDOOR to ringtoneIndoorVolume.value,
+                VolumeProfile.RINGTONE_OUTDOOR to ringtoneOutdoorVolume.value,
+                VolumeProfile.NOTIFICATION_INDOOR to notificationIndoorVolume.value,
+                VolumeProfile.NOTIFICATION_OUTDOOR to notificationOutdoorVolume.value,
+//                VolumeProfile.SYSTEM_INDOOR to systemIndoorVolume.value,
+//                VolumeProfile.SYSTEM_OUTDOOR to systemOutdoorVolume.value,
+//                VolumeProfile.CALL_INDOOR to callIndoorVolume.value,
+//                VolumeProfile.CALL_OUTDOOR to callOutdoorVolume.value,
+//                VolumeProfile.ALARM_INDOOR to alarmIndoorVolume.value,
+//                VolumeProfile.ALARM_OUTDOOR to alarmOutdoorVolume.value
+            )
+        )
+
+        val updatedProfiles = profileManager.loadProfiles().map {
+            if (it.name == activeProfile.name) updatedProfile else it
+        }
+
+        profileManager.saveProfiles(updatedProfiles)
+        profileListState.value = updatedProfiles
+    }
+
+    @Composable
+    fun DeleteProfileDialog(
+        showDialog: Boolean,
+        onDismiss: () -> Unit,
+        onConfirm: () -> Unit
+    ) {
+        if (showDialog) {
+            AlertDialog(
+                onDismissRequest = onDismiss,
+                title = { Text("Delete Profile") },
+                text = { Text("Are you sure you want to delete this profile?") },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            onConfirm()
+                            onDismiss()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
+                    ) {
+                        Text("Delete")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+    }
+
+    @Composable
+    fun ProfileSelectionSection(
+        profiles: List<VolumeProfile>,
+        selectedProfileName: String,
+        onProfileSelected: (String) -> Unit,
+        onCreateNewProfile: () -> Unit,
+        onDeleteProfile: () -> Unit,
+        modifier: Modifier = Modifier
+    ) {
+        Column(modifier = modifier.fillMaxWidth()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    "Profiles",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                Row {
+                    if (selectedProfileName.isNotEmpty()) {
+                        IconButton(
+                            onClick = { onDeleteProfile() },
+                            modifier = Modifier.padding(end = 8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete Profile",
+                                tint = Color.Red
+                            )
+                        }
+                    }
+                    Button(
+                        onClick = onCreateNewProfile,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6200EE))
+                    ) {
+                        Text("New Profile")
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (profiles.isEmpty()) {
+                Text(
+                    "No profiles yet. Create your first profile!",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            } else {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(profiles) { profile ->
+                        ProfileChip(
+                            profile = profile,
+                            isSelected = profile.name == selectedProfileName,
+                            onSelected = { onProfileSelected(profile.name) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun ProfileChip(
+        profile: VolumeProfile,
+        isSelected: Boolean,
+        onSelected: () -> Unit,
+        modifier: Modifier = Modifier
+    ) {
+        Surface(
+            color = if (isSelected) Color(0xFF6200EE) else Color(0xFFE0E0E0),
+            shape = RoundedCornerShape(16.dp),
+            modifier = modifier.clickable { onSelected() }
+        ) {
+            Text(
+                text = profile.name,
+                style = MaterialTheme.typography.labelMedium,
+                color = if (isSelected) Color.White else Color.Black,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+        }
+    }
+
+    @Composable
+    fun NewProfileDialog(
+        showDialog: Boolean,
+        onDismiss: () -> Unit,
+        onConfirm: (String) -> Unit
+    ) {
+        if (showDialog) {
+            val newProfileName = remember { mutableStateOf("") }
+
+            AlertDialog(
+                onDismissRequest = onDismiss,
+                title = { Text("Create New Profile") },
+                text = {
+                    OutlinedTextField(
+                        value = newProfileName.value,
+                        onValueChange = { newProfileName.value = it },
+                        label = { Text("Profile Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (newProfileName.value.isNotBlank()) {
+                                onConfirm(newProfileName.value)
+                            }
+                        },
+                        enabled = newProfileName.value.isNotBlank()
+                    ) {
+                        Text("Create")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
     }
 
 
@@ -261,8 +559,15 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+
+
+
+
     @Composable
     fun MainScreen() {
+        val showNewProfileDialog = remember { mutableStateOf(false) }
+        val showDeleteDialog = remember { mutableStateOf(false) }
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = Color(0xFFF0F2F5)
@@ -274,12 +579,44 @@ class MainActivity : ComponentActivity() {
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // SSID Input
+                // Profile Selection Section
+                ProfileSelectionSection(
+                    profiles = profileListState.value,
+                    selectedProfileName = selectedProfileName.value,
+                    onProfileSelected = { name ->
+                        profileManager.setActiveProfileName(name)
+                        selectedProfileName.value = name
+                        loadActiveProfileSettings()
+                    },
+                    onCreateNewProfile = { showNewProfileDialog.value = true },
+                    onDeleteProfile = { showDeleteDialog.value = true }
+                )
+
+                // New Profile Dialog
+                NewProfileDialog(
+                    showDialog = showNewProfileDialog.value,
+                    onDismiss = { showNewProfileDialog.value = false },
+                    onConfirm = { name ->
+                        createNewProfile(name)
+                        showNewProfileDialog.value = false
+                    }
+                )
+                // Delete Profile Dialog
+                DeleteProfileDialog(
+                    showDialog = showDeleteDialog.value,
+                    onDismiss = { showDeleteDialog.value = false },
+                    onConfirm = {
+                        deleteCurrentProfile()
+                        showDeleteDialog.value = false
+                    }
+                )
+                // Rest of your existing UI (SSID input, volume controls, etc.)
                 OutlinedTextField(
                     value = currentSSID.value,
                     onValueChange = {
                         currentSSID.value = it
                         sharedPrefs.edit().putString("HOME_SSID", it).apply()
+                        updateActiveProfileSsid(it)
                     },
                     label = { Text("Home WiFi SSID") },
                     modifier = Modifier.fillMaxWidth(),
@@ -294,19 +631,19 @@ class MainActivity : ComponentActivity() {
                 )
 
                 // Volume Control Cards
-                VolumeControlCard(
-                    title = "Media Volume",
-                    indoorVolume = mediaIndoorVolume.value,
-                    outdoorVolume = mediaOutdoorVolume.value,
-                    onIndoorChange = {
-                        mediaIndoorVolume.value = it
-                        sharedPrefs.edit().putInt("MEDIA_INDOOR_VOLUME", it).apply()
-                    },
-                    onOutdoorChange = {
-                        mediaOutdoorVolume.value = it
-                        sharedPrefs.edit().putInt("MEDIA_OUTDOOR_VOLUME", it).apply()
-                    }
-                )
+//                VolumeControlCard(
+//                    title = "Media Volume",
+//                    indoorVolume = mediaIndoorVolume.value,
+//                    outdoorVolume = mediaOutdoorVolume.value,
+//                    onIndoorChange = {
+//                        mediaIndoorVolume.value = it
+//                        saveCurrentSettingsToProfile()
+//                    },
+//                    onOutdoorChange = {
+//                        mediaOutdoorVolume.value = it
+//                        saveCurrentSettingsToProfile()
+//                    }
+//                )
 
                 VolumeControlCard(
                     title = "Ringtone Volume",
@@ -314,11 +651,11 @@ class MainActivity : ComponentActivity() {
                     outdoorVolume = ringtoneOutdoorVolume.value,
                     onIndoorChange = {
                         ringtoneIndoorVolume.value = it
-                        sharedPrefs.edit().putInt("RINGTONE_INDOOR_VOLUME", it).apply()
+                        saveCurrentSettingsToProfile()
                     },
                     onOutdoorChange = {
                         ringtoneOutdoorVolume.value = it
-                        sharedPrefs.edit().putInt("RINGTONE_OUTDOOR_VOLUME", it).apply()
+                        saveCurrentSettingsToProfile()
                     }
                 )
 
@@ -328,55 +665,55 @@ class MainActivity : ComponentActivity() {
                     outdoorVolume = notificationOutdoorVolume.value,
                     onIndoorChange = {
                         notificationIndoorVolume.value = it
-                        sharedPrefs.edit().putInt("NOTIFICATION_INDOOR_VOLUME", it).apply()
+                        saveCurrentSettingsToProfile()
                     },
                     onOutdoorChange = {
                         notificationOutdoorVolume.value = it
-                        sharedPrefs.edit().putInt("NOTIFICATION_OUTDOOR_VOLUME", it).apply()
+                        saveCurrentSettingsToProfile()
                     }
                 )
-
-                VolumeControlCard(
-                    title = "System Volume",
-                    indoorVolume = systemIndoorVolume.value,
-                    outdoorVolume = systemOutdoorVolume.value,
-                    onIndoorChange = {
-                        systemIndoorVolume.value = it
-                        sharedPrefs.edit().putInt("SYSTEM_INDOOR_VOLUME", it).apply()
-                    },
-                    onOutdoorChange = {
-                        systemOutdoorVolume.value = it
-                        sharedPrefs.edit().putInt("SYSTEM_OUTDOOR_VOLUME", it).apply()
-                    }
-                )
-
-                VolumeControlCard(
-                    title = "Call Volume",
-                    indoorVolume = callIndoorVolume.value,
-                    outdoorVolume = callOutdoorVolume.value,
-                    onIndoorChange = {
-                        callIndoorVolume.value = it
-                        sharedPrefs.edit().putInt("CALL_INDOOR_VOLUME", it).apply()
-                    },
-                    onOutdoorChange = {
-                        callOutdoorVolume.value = it
-                        sharedPrefs.edit().putInt("CALL_OUTDOOR_VOLUME", it).apply()
-                    }
-                )
-
-                VolumeControlCard(
-                    title = "Alarm Volume",
-                    indoorVolume = alarmIndoorVolume.value,
-                    outdoorVolume = alarmOutdoorVolume.value,
-                    onIndoorChange = {
-                        alarmIndoorVolume.value = it
-                        sharedPrefs.edit().putInt("ALARM_INDOOR_VOLUME", it).apply()
-                    },
-                    onOutdoorChange = {
-                        alarmOutdoorVolume.value = it
-                        sharedPrefs.edit().putInt("ALARM_OUTDOOR_VOLUME", it).apply()
-                    }
-                )
+//
+//                VolumeControlCard(
+//                    title = "System Volume",
+//                    indoorVolume = systemIndoorVolume.value,
+//                    outdoorVolume = systemOutdoorVolume.value,
+//                    onIndoorChange = {
+//                        systemIndoorVolume.value = it
+//                        saveCurrentSettingsToProfile()
+//                    },
+//                    onOutdoorChange = {
+//                        systemOutdoorVolume.value = it
+//                        saveCurrentSettingsToProfile()
+//                    }
+//                )
+//
+//                VolumeControlCard(
+//                    title = "Call Volume",
+//                    indoorVolume = callIndoorVolume.value,
+//                    outdoorVolume = callOutdoorVolume.value,
+//                    onIndoorChange = {
+//                        callIndoorVolume.value = it
+//                        saveCurrentSettingsToProfile()
+//                    },
+//                    onOutdoorChange = {
+//                        callOutdoorVolume.value = it
+//                        saveCurrentSettingsToProfile()
+//                    }
+//                )
+//
+//                VolumeControlCard(
+//                    title = "Alarm Volume",
+//                    indoorVolume = alarmIndoorVolume.value,
+//                    outdoorVolume = alarmOutdoorVolume.value,
+//                    onIndoorChange = {
+//                        alarmIndoorVolume.value = it
+//                        saveCurrentSettingsToProfile()
+//                    },
+//                    onOutdoorChange = {
+//                        alarmOutdoorVolume.value = it
+//                        saveCurrentSettingsToProfile()
+//                    }
+//                )
 
                 // Scan Button
                 Column(
@@ -414,18 +751,18 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         var currentSSID = mutableStateOf("")
-        var mediaIndoorVolume = mutableStateOf(50)
-        var mediaOutdoorVolume = mutableStateOf(100)
+//        var mediaIndoorVolume = mutableStateOf(50)
+//        var mediaOutdoorVolume = mutableStateOf(100)
         var ringtoneIndoorVolume = mutableStateOf(50)
         var ringtoneOutdoorVolume = mutableStateOf(100)
         var notificationIndoorVolume = mutableStateOf(50)
         var notificationOutdoorVolume = mutableStateOf(100)
-        var systemIndoorVolume = mutableStateOf(50)
-        var systemOutdoorVolume = mutableStateOf(100)
-        var callIndoorVolume = mutableStateOf(50)
-        var callOutdoorVolume = mutableStateOf(100)
-        var alarmIndoorVolume = mutableStateOf(50)
-        var alarmOutdoorVolume = mutableStateOf(100)
+//        var systemIndoorVolume = mutableStateOf(50)
+//        var systemOutdoorVolume = mutableStateOf(100)
+//        var callIndoorVolume = mutableStateOf(50)
+//        var callOutdoorVolume = mutableStateOf(100)
+//        var alarmIndoorVolume = mutableStateOf(50)
+//        var alarmOutdoorVolume = mutableStateOf(100)
         var isScanning = mutableStateOf(false)
     }
 }

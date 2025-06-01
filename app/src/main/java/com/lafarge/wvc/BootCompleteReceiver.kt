@@ -8,11 +8,11 @@ import android.os.Build
 class BootCompleteReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         if (intent?.action == Intent.ACTION_BOOT_COMPLETED) {
-            val prefs = context.getSharedPreferences("wifi_volume_prefs", Context.MODE_PRIVATE)
-            val ssid = prefs.getString("HOME_SSID", "")
-            if (!ssid.isNullOrEmpty()) {
+            val profileManager = ProfileStorageManager(context)
+            val activeProfile = profileManager.getActiveProfile()
+            activeProfile?.let { profile ->
                 val serviceIntent = Intent(context, WiFiScanService::class.java).apply {
-                    putExtra("HOME_SSID", ssid)
+                    putExtra("HOME_SSID", profile.ssid)
                 }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     context.startForegroundService(serviceIntent)
