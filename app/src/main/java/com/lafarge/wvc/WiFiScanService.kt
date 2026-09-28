@@ -1,233 +1,196 @@
 package com.lafarge.wvc
 
-import android.app.AlarmManager
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
-import android.app.Service
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.content.pm.PackageManager
+import android.app.*
+import android.content.*
+import android.content.pm.ServiceInfo
 import android.media.AudioManager
-import android.net.wifi.ScanResult
 import android.net.wifi.WifiManager
-import android.os.Build
-import android.os.Handler
-import android.os.IBinder
-import android.os.Looper
+import android.os.*
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
 
+/** User-enabled location foreground service. Scanning remains subject to Android throttling. */
 class WiFiScanService : Service() {
-
-    private lateinit var wifiManager: WifiManager
-    private lateinit var audioManager: AudioManager
-    private lateinit var prefs: android.content.SharedPreferences
+    private lateinit var wifi: WifiManager
+    private lateinit var audio: AudioManager
+    private lateinit var prefs: SharedPreferences
     private val handler = Handler(Looper.getMainLooper())
+    private var registered = false
+    private var tracker = PresenceTracker()
+    private var targetSsid = ""
+    private var applied: String? = null
+    private var lastRequestMs = -SCAN_INTERVAL_MS
+    private var lastStatus = ""
 
-    private var homeSSID: String = ""
-    private var isScanning = false
-
-    private lateinit var scanReceiver: BroadcastReceiver
-    private lateinit var wifiStateReceiver: BroadcastReceiver
-
-    private val scanRunnable = object : Runnable {
+    private val scanTask = object : Runnable {
         override fun run() {
-            if (isScanning) {
-                startWifiScan()
-                handler.postDelayed(this, 10000) // every 10 seconds
+            requestScan()
+            handler.postDelayed(this, SCAN_INTERVAL_MS)
+        }
+    }
+    private val receiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == WifiManager.SCAN_RESULTS_AVAILABLE_ACTION) {
+                if (intent.getBooleanExtra(WifiManager.EXTRA_RESULTS_UPDATED, false)) consumeResults()
+                else status("Scan unavailable; keeping current volume")
+            } else {
+                // Turning Wi-Fi/location off is not proof that the user left the area.
+                requestScan()
             }
         }
     }
 
     override fun onCreate() {
         super.onCreate()
-
-        prefs = getSharedPreferences("wifi_volume_prefs", MODE_PRIVATE)
-        wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-
-        createNotificationChannel()
-        startForeground(1, createNotification("Scanning Wi-Fi..."))
-
-        setupReceivers()
-
-        isScanning = true
-        startWifiScan()
-        handler.post(scanRunnable)
+        prefs = MonitoringSettings.prefs(this)
+        wifi = applicationContext.getSystemService(WifiManager::class.java)
+        audio = getSystemService(AudioManager::class.java)
+        getSystemService(NotificationManager::class.java).createNotificationChannel(
+            NotificationChannel(CHANNEL, "Wi-Fi monitoring", NotificationManager.IMPORTANCE_LOW)
+        )
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        homeSSID = intent?.getStringExtra("HOME_SSID") ?:
-                prefs.getString("HOME_SSID", "") ?: ""
-        return START_REDELIVER_INTENT
-    }
-    override fun onBind(intent: Intent?): IBinder? = null
-
-    override fun onTaskRemoved(rootIntent: Intent?) {
-        super.onTaskRemoved(rootIntent)
-        val restartIntent = Intent(this, WiFiScanService::class.java).apply {
-            putExtra("HOME_SSID", homeSSID)
+        if (!prefs.getBoolean(MonitoringSettings.ENABLED, false)) {
+            stopSelf()
+            return START_NOT_STICKY
         }
-
-        val pendingIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            PendingIntent.getService(
-                this,
-                0,
-                restartIntent,
-                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
-            )
-        } else {
-            PendingIntent.getService(
-                this,
-                0,
-                restartIntent,
-                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
-            )
-        }
-
-        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        alarmManager.set(
-            AlarmManager.RTC_WAKEUP,
-            System.currentTimeMillis() + 1000, // 1 second delay
-            pendingIntent
-        )
-    }
-
-    private fun createNotificationChannel() {
-        val channel = NotificationChannel(
-            "wifi_volume_channel",
-            "WiFi Volume Control",
-            NotificationManager.IMPORTANCE_LOW
-        )
-        val notificationManager = getSystemService(NotificationManager::class.java)
-        notificationManager.createNotificationChannel(channel)
-    }
-
-    private fun createNotification(contentText: String): Notification {
-        return NotificationCompat.Builder(this, "wifi_volume_channel")
-            .setContentTitle("Wi-Fi Volume Control Active")
-            .setContentText(contentText)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setOngoing(true)
-            .setShowWhen(false)
-            .build()
-    }
-
-    private fun setupReceivers() {
-        scanReceiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context?, intent: Intent?) {
-                try {
-                    if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                        val results = wifiManager.scanResults
-                        handleScanResults(results)
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
-        }
-        registerReceiver(scanReceiver, IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION))
-
-        wifiStateReceiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context?, intent: Intent?) {
-                val action = intent?.action
-                if (action == WifiManager.WIFI_STATE_CHANGED_ACTION) {
-                    val wifiState = intent.getIntExtra(WifiManager.EXTRA_WIFI_STATE, WifiManager.WIFI_STATE_UNKNOWN)
-                    if (wifiState == WifiManager.WIFI_STATE_ENABLED) {
-                        startWifiScan()
-                    }
-                }
-            }
-        }
-        registerReceiver(wifiStateReceiver, IntentFilter(WifiManager.WIFI_STATE_CHANGED_ACTION))
-    }
-
-    private fun startWifiScan() {
         try {
-            val success = wifiManager.startScan()
-            if (!success) {
-                // Scan failed (could be throttled or Wi-Fi off)
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
+            ServiceCompat.startForeground(this, 1, notification("Waiting for a fresh Wi-Fi scan"),
+                if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION else 0)
+        } catch (e: SecurityException) {
+            MonitoringSettings.status(this, "Location permission required; open WVC to resume")
+            stopSelf()
+            return START_NOT_STICKY
+        } catch (e: IllegalStateException) {
+            MonitoringSettings.status(this, "Android blocked startup; open WVC to resume")
+            stopSelf()
+            return START_NOT_STICKY
         }
+        if (!registered) {
+            // These are system-only broadcasts; no custom/exported app command receiver.
+            ContextCompat.registerReceiver(this, receiver, IntentFilter().apply {
+                addAction(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION)
+                addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
+                addAction(android.location.LocationManager.MODE_CHANGED_ACTION)
+            }, ContextCompat.RECEIVER_EXPORTED)
+            registered = true
+        }
+        handler.removeCallbacks(scanTask)
+        handler.post(scanTask)
+        return START_STICKY
     }
 
-    private fun handleScanResults(results: List<ScanResult>) {
-        val profileManager = ProfileStorageManager(this)
-        val activeProfile = profileManager.getActiveProfile()
-        if (activeProfile == null) {
-            // Fallback to legacy behavior
-            handleLegacyScanResults(results)
+    private fun requestScan() {
+        if (!prefs.getBoolean(MonitoringSettings.ENABLED, false)) return
+        if (!MonitoringSettings.hasLocation(this) || !MonitoringSettings.locationEnabled(this)) {
+            status("Paused: enable precise location and Location services")
             return
         }
-        val isIndoor = results.any { it.SSID == activeProfile.ssid }
-        val volumes = activeProfile.volumes
-
-        if (isIndoor) {
-            // Indoor volumes
-//            setStreamVolume(AudioManager.STREAM_MUSIC, volumes[VolumeProfile.MEDIA_INDOOR] ?: 50)
-            setStreamVolume(AudioManager.STREAM_RING, volumes[VolumeProfile.RINGTONE_INDOOR] ?: 50)
-            setStreamVolume(AudioManager.STREAM_NOTIFICATION, volumes[VolumeProfile.NOTIFICATION_INDOOR] ?: 50)
-//            setStreamVolume(AudioManager.STREAM_SYSTEM, volumes[VolumeProfile.SYSTEM_INDOOR] ?: 50)
-//            setStreamVolume(AudioManager.STREAM_VOICE_CALL, volumes[VolumeProfile.CALL_INDOOR] ?: 50)
-//            setStreamVolume(AudioManager.STREAM_ALARM, volumes[VolumeProfile.ALARM_INDOOR] ?: 50)
-        } else {
-            // Outdoor volumes
-//            setStreamVolume(AudioManager.STREAM_MUSIC, volumes[VolumeProfile.MEDIA_OUTDOOR] ?: 100)
-            setStreamVolume(AudioManager.STREAM_RING, volumes[VolumeProfile.RINGTONE_OUTDOOR] ?: 100)
-            setStreamVolume(AudioManager.STREAM_NOTIFICATION, volumes[VolumeProfile.NOTIFICATION_OUTDOOR] ?: 100)
-//            setStreamVolume(AudioManager.STREAM_SYSTEM, volumes[VolumeProfile.SYSTEM_OUTDOOR] ?: 100)
-//            setStreamVolume(AudioManager.STREAM_VOICE_CALL, volumes[VolumeProfile.CALL_OUTDOOR] ?: 100)
-//            setStreamVolume(AudioManager.STREAM_ALARM, volumes[VolumeProfile.ALARM_OUTDOOR] ?: 100)
+        if (!wifi.isWifiEnabled) {
+            status("Paused: turn on Wi-Fi")
+            return
         }
-    }
-
-    private fun handleLegacyScanResults(results: List<ScanResult>) {
-        val isIndoor = results.any { it.SSID == homeSSID }
-        val prefs = getSharedPreferences("wifi_volume_prefs", MODE_PRIVATE)
-
-        if (isIndoor) {
-//            setStreamVolume(AudioManager.STREAM_MUSIC, prefs.getInt("MEDIA_INDOOR_VOLUME", 50))
-            setStreamVolume(AudioManager.STREAM_RING, prefs.getInt("RINGTONE_INDOOR_VOLUME", 50))
-            setStreamVolume(AudioManager.STREAM_NOTIFICATION, prefs.getInt("NOTIFICATION_INDOOR_VOLUME", 50))
-//            setStreamVolume(AudioManager.STREAM_SYSTEM, prefs.getInt("SYSTEM_INDOOR_VOLUME", 50))
-//            setStreamVolume(AudioManager.STREAM_VOICE_CALL, prefs.getInt("CALL_INDOOR_VOLUME", 50))
-//            setStreamVolume(AudioManager.STREAM_ALARM, prefs.getInt("ALARM_INDOOR_VOLUME", 50))
-        } else {
-//            setStreamVolume(AudioManager.STREAM_MUSIC, prefs.getInt("MEDIA_OUTDOOR_VOLUME", 100))
-            setStreamVolume(AudioManager.STREAM_RING, prefs.getInt("RINGTONE_OUTDOOR_VOLUME", 100))
-            setStreamVolume(AudioManager.STREAM_NOTIFICATION, prefs.getInt("NOTIFICATION_OUTDOOR_VOLUME", 100))
-//            setStreamVolume(AudioManager.STREAM_SYSTEM, prefs.getInt("SYSTEM_OUTDOOR_VOLUME", 100))
-//            setStreamVolume(AudioManager.STREAM_VOICE_CALL, prefs.getInt("CALL_OUTDOOR_VOLUME", 100))
-//            setStreamVolume(AudioManager.STREAM_ALARM, prefs.getInt("ALARM_OUTDOOR_VOLUME", 100))
-        }
-    }
-
-    private fun setStreamVolume(streamType: Int, percent: Int) {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastRequestMs < SCAN_INTERVAL_MS) return
+        lastRequestMs = now
         try {
-            val maxVolume = audioManager.getStreamMaxVolume(streamType)
-            val targetVolume = (percent / 100.0 * maxVolume).toInt()
-            audioManager.setStreamVolume(streamType, targetVolume, 0)
-        } catch (e: Exception) {
-            e.printStackTrace()
+            if (!wifi.startScan()) status("Scan throttled; waiting for Android, keeping current volume")
+        } catch (e: SecurityException) {
+            status("Wi-Fi scan permission unavailable; open WVC")
         }
     }
 
+    @Suppress("DEPRECATION")
+    private fun consumeResults() {
+        if (!prefs.getBoolean(MonitoringSettings.ENABLED, false)) return
+        if (!MonitoringSettings.hasLocation(this) || !MonitoringSettings.locationEnabled(this) || !wifi.isWifiEnabled) return
+        try {
+            val profile = ProfileStorageManager(this).getActiveProfile()
+            val ssid = profile?.ssid ?: prefs.getString("HOME_SSID", "").orEmpty()
+            if (ssid.isBlank()) {
+                status("Paused: select a profile with a Wi-Fi name")
+                return
+            }
+            if (targetSsid != ssid) {
+                targetSsid = ssid
+                tracker = PresenceTracker()
+                applied = null
+            }
+            val nowUs = SystemClock.elapsedRealtime() * 1000
+            val results = wifi.scanResults.filter { nowUs - it.timestamp in 0..MAX_SCAN_AGE_US }
+            // An empty result has no timestamp with which to establish freshness.
+            if (results.isEmpty()) {
+                status("No fresh Wi-Fi observations; keeping current volume")
+                return
+            }
+            val indoor = tracker.observe(results.any { it.SSID == ssid }, results.maxOf { it.timestamp })
+            if (indoor == null) {
+                status("Confirming Wi-Fi area; keeping current volume")
+                return
+            }
+            val ringKey = if (indoor) VolumeProfile.RINGTONE_INDOOR else VolumeProfile.RINGTONE_OUTDOOR
+            val notificationKey = if (indoor) VolumeProfile.NOTIFICATION_INDOOR else VolumeProfile.NOTIFICATION_OUTDOOR
+            val default = if (indoor) 50 else 100
+            val ring = (profile?.volumes?.get(ringKey) ?: prefs.getInt("${ringKey}_VOLUME", default)).coerceIn(0, 100)
+            val alerts = (profile?.volumes?.get(notificationKey) ?: prefs.getInt("${notificationKey}_VOLUME", default)).coerceIn(0, 100)
+            val signature = "$ssid:$indoor:$ring:$alerts"
+            if (signature != applied) {
+                // Do not override a user's global DND mode. Android 15+ composes DND rules.
+                val manager = getSystemService(NotificationManager::class.java)
+                if (manager.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL) {
+                    status("Do Not Disturb is active; volume change deferred")
+                    return
+                }
+                setVolume(AudioManager.STREAM_RING, ring)
+                setVolume(AudioManager.STREAM_NOTIFICATION, alerts)
+                applied = signature
+            }
+            status(if (indoor) "Inside Wi-Fi area: $ssid" else "Outside Wi-Fi area: $ssid")
+        } catch (e: SecurityException) {
+            status("Volume or Wi-Fi access denied; check WVC permissions")
+        } catch (e: IllegalStateException) {
+            status("Android blocked the volume change; open WVC and tap Resume")
+        }
+    }
+
+    private fun setVolume(stream: Int, percent: Int) {
+        val target = (audio.getStreamMaxVolume(stream) * percent / 100.0).toInt()
+        audio.setStreamVolume(stream, target, 0)
+        // Android 17 may silently reject audio calls after a background service restart.
+        check(audio.getStreamVolume(stream) == target) { "Volume change was not applied" }
+    }
+
+    private fun notification(message: String): Notification {
+        val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        return NotificationCompat.Builder(this, CHANNEL)
+            .setContentTitle("Wi-Fi Volume Control")
+            .setContentText(message)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true).build()
+    }
+    private fun status(message: String) {
+        if (message == lastStatus && prefs.getString(MonitoringSettings.STATUS, null) == message) return
+        lastStatus = message
+        MonitoringSettings.status(this, message)
+        if (Build.VERSION.SDK_INT < 33 || checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            getSystemService(NotificationManager::class.java).notify(1, notification(message))
+        }
+    }
+    override fun onBind(intent: Intent?): IBinder? = null
     override fun onDestroy() {
+        handler.removeCallbacksAndMessages(null)
+        if (registered) unregisterReceiver(receiver)
         super.onDestroy()
-        isScanning = false
-        handler.removeCallbacks(scanRunnable)
-
-        try {
-            unregisterReceiver(scanReceiver)
-            unregisterReceiver(wifiStateReceiver)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+    }
+    companion object {
+        const val CHANNEL = "wifi_monitoring_v2"
+        // Android can throttle further; passive system scan broadcasts are also consumed.
+        const val SCAN_INTERVAL_MS = 120_000L
+        const val MAX_SCAN_AGE_US = 30_000_000L
     }
 }
