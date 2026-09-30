@@ -1,7 +1,11 @@
 package com.lafarge.wvc
 
 import android.graphics.Bitmap
-import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.*
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
 import android.graphics.Canvas
 import android.view.inspector.WindowInspector
 import androidx.compose.ui.platform.LocalDensity
@@ -28,10 +32,10 @@ class WvcUiTest {
     private val home = VolumeProfile("Home", "Home_WiFi", mapOf(VolumeProfile.RINGTONE_INDOOR to 25, VolumeProfile.NOTIFICATION_INDOOR to 15, VolumeProfile.RINGTONE_OUTDOOR to 80, VolumeProfile.NOTIFICATION_OUTDOOR to 65))
     private val ready = WvcState(listOf(home), "Home", setup = listOf(SetupItem("location", "Precise location", "Access is ready", true, true, "Allow access")))
 
-    private fun render(state: WvcState = ready, dark: Boolean = false, onStop: () -> Unit = {}) {
+    private fun render(state: WvcState = ready, onStop: () -> Unit = {}, onSelect: (String) -> Unit = {}, onDelete: (String) -> Unit = {}) {
         compose.setContent {
-            WVCTheme(darkTheme = dark) {
-                WvcApp(state, onStart = {}, onStop = onStop, onSetupAction = {}, onSelect = {}, onSave = { _, _ -> null }, onDelete = {})
+            WVCTheme {
+                WvcApp(state, onStart = {}, onStop = onStop, onSetupAction = {}, onSelect = onSelect, onSave = { _, _ -> null }, onDelete = onDelete)
             }
         }
     }
@@ -48,16 +52,21 @@ class WvcUiTest {
             bitmap.recycle()
         }
     }
-    @Test fun phoneOverviewRenders() {
+    @Test fun phoneHomeRenders() {
         render()
         compose.onNodeWithText("Start monitoring").assertIsDisplayed()
-        screenshot("phone-overview")
+        screenshot("phone-home")
     }
-    @Test @Config(qualifiers = "w1040dp-h900dp-xhdpi") fun tabletUsesRailAndTwoColumnsInDarkMode() {
-        render(dark = true)
-        compose.onNodeWithText("Edit sound settings").assertIsDisplayed()
-        compose.onNodeWithText("Inside the area").assertIsDisplayed()
-        screenshot("tablet-dark")
+    @Test @Config(qualifiers = "w1040dp-h900dp-night-xhdpi") fun tabletStaysWhiteInSystemDarkMode() {
+        var background = 0
+        compose.setContent { WVCTheme {
+            background = MaterialTheme.colorScheme.background.toArgb()
+            WvcApp(ready, onStart = {}, onStop = {}, onSetupAction = {}, onSelect = {}, onSave = { _, _ -> null }, onDelete = {})
+        } }
+        compose.runOnIdle { assertEquals(0xFFF5F6F7.toInt(), background) }
+        compose.onNodeWithContentDescription("Edit sound settings").assertIsDisplayed()
+        compose.onNodeWithText("In Wi-Fi range").assertIsDisplayed()
+        screenshot("tablet-home")
     }
     @Test fun stopIsAvailableEvenWhenPermissionsAreMissing() {
         var stopped = false
@@ -105,14 +114,87 @@ class WvcUiTest {
             }
         }
         compose.onNodeWithText("Start monitoring").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Setup", useUnmergedTree = true).performClick()
+        compose.onNodeWithContentDescription("App setup").performClick()
         compose.onNodeWithText("Precise location").performScrollTo().assertIsDisplayed()
         screenshot("compact-large-text-setup")
     }
     @Test fun emptyStateAndProfileActionsAreAccessible() {
         render(WvcState())
-        compose.onNodeWithText("Profiles", useUnmergedTree = true).performClick()
-        compose.onNodeWithText("New profile", useUnmergedTree = true).performClick()
+        compose.onNodeWithText("Profile", useUnmergedTree = true).performClick()
+        compose.onNodeWithText("Create profile", useUnmergedTree = true).performClick()
         compose.onNodeWithTag("profile-name").assertExists()
+    }
+
+    @Test fun homePickerSelectsProfileWithoutOpeningEditor() {
+        val office = home.copy(name = "Office", ssid = "Office_WiFi")
+        var selected = ""
+        render(ready.copy(profiles = listOf(home, office)), onSelect = { selected = it })
+        compose.onNodeWithTag("choose-profile").performScrollTo().performClick()
+        compose.onNodeWithText("Office").performClick()
+        assertEquals("Office", selected)
+        compose.onNodeWithTag("profile-editor").assertDoesNotExist()
+        compose.onNodeWithText("Choose a profile").assertDoesNotExist()
+    }
+    @Test fun profilePageHasTwoIconTabsAndEditsExistingProfile() {
+        render()
+        compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)).assertCountEquals(2)
+        compose.onNodeWithText("Profile", useUnmergedTree = true).performClick()
+        compose.onNodeWithContentDescription("Edit Home").performScrollTo().performClick()
+        compose.onNodeWithTag("profile-name").assertTextContains("Home")
+        compose.onNodeWithTag("profile-ssid").assertTextContains("Home_WiFi")
+        compose.onNodeWithText("Cancel").performClick()
+        compose.onNodeWithTag("profile-editor").assertDoesNotExist()
+    }
+    @Test fun deletingActiveProfileRequiresConfirmation() {
+        var deleted = ""
+        render(onDelete = { deleted = it })
+        compose.onNodeWithText("Profile", useUnmergedTree = true).performClick()
+        compose.onNodeWithContentDescription("Delete Home").performScrollTo().performClick()
+        assertEquals("", deleted)
+        compose.onNodeWithText("Delete profile").performClick()
+        assertEquals("Home", deleted)
+    }
+    @Test fun profilePageScreenshot() {
+        render(ready.copy(profiles = listOf(home, home.copy(name = "Office", ssid = "Studio_WiFi"))))
+        compose.onNodeWithText("Profile", useUnmergedTree = true).performClick()
+        compose.onNodeWithText("Create profile").assertIsDisplayed()
+        compose.onNodeWithContentDescription("App setup").assertIsDisplayed()
+        screenshot("phone-profiles")
+    }
+    @Test fun activeMonitoringAndProfilePickerRemainInteractiveDuringWaves() {
+        render(ready.copy(enabled = true, status = "Home_WiFi is nearby. Inside volumes applied."))
+        compose.onNodeWithContentDescription("Wi-Fi monitoring enabled").assertIsDisplayed()
+        compose.onNodeWithTag("choose-profile").performScrollTo().performClick()
+        compose.onNodeWithText("Choose a profile").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Close Choose a profile").performClick()
+        compose.onNodeWithText("Stop monitoring").performScrollTo().assertIsDisplayed()
+        screenshot("phone-monitoring")
+    }
+
+    @Test fun wifiWavesMoveWhileEnabledAndSettleWhenPaused() {
+        compose.mainClock.autoAdvance = false
+        var enabled by mutableStateOf(true)
+        compose.setContent { WVCTheme { WifiScanner(enabled, visible = true) } }
+        fun frame(): Bitmap {
+            var bitmap: Bitmap? = null
+            compose.runOnIdle {
+                val view = WindowInspector.getGlobalWindowViews().last()
+                bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+                view.draw(Canvas(bitmap!!))
+            }
+            return bitmap!!
+        }
+        compose.mainClock.advanceTimeBy(100)
+        val first = frame()
+        compose.mainClock.advanceTimeBy(900)
+        val moving = frame()
+        assertFalse("Enabled waves should advance", first.sameAs(moving))
+        compose.runOnIdle { enabled = false }
+        compose.mainClock.advanceTimeBy(600)
+        val paused = frame()
+        compose.mainClock.advanceTimeBy(1000)
+        val still = frame()
+        assertTrue("Paused waves should stop drawing new animation frames", paused.sameAs(still))
+        listOf(first, moving, paused, still).forEach { it.recycle() }
     }
 }

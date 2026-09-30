@@ -1,75 +1,62 @@
-# WVC interface redesign
+# WVC · white interface
 
-WVC now has three focused screens instead of one long settings form:
+The app has two tabs, **Home** and **Profile**, each with an icon. The same bottom
+navigation stays available on phones and tablets.
 
-- **Overview:** monitoring status, Start/Stop/Resume, the selected Wi-Fi profile,
-  inside/outside volume summaries, and setup guidance.
-- **Profiles:** create, edit, rename, select and delete saved places. One profile
-  is selected at a time. The first profile is selected automatically.
-- **Setup:** current permission and system-setting status, required versus optional
-  access, direct Android settings links, and reboot/battery guidance.
+## Home
 
-## Interaction fixes
+- A large, sculpted Wi-Fi indicator with three gently expanding waves.
+- Explicit monitoring status and Start/Stop/Resume controls. The waves represent
+  enabled monitoring, not a promise of continuous or successful radio scans.
+- A profile picker directly on Home. Selection closes the picker and updates the
+  saved active profile; the service applies volumes after a fresh scan.
+- In-range and out-of-range ringtone/notification summaries, with an edit action.
+- A setup button opens permission readiness, Android settings links, and
+  reboot/battery guidance without adding a third tab.
 
-- Profile edits are drafts with explicit Save/Cancel. Typing a partial Wi-Fi name
-  or moving a slider no longer changes the running service's saved settings.
-- Drafts and the selected screen survive activity recreation. Back and Cancel
-  ask before discarding modified drafts; Back from a secondary screen returns to Overview.
-- Duplicate names (including capitalization/outer whitespace), blank names,
-  blank SSIDs, and SSIDs exceeding 32 UTF-8 bytes produce inline validation.
-  SSID spaces and capitalization are preserved because network names are exact.
-- Renaming a selected profile preserves its selection. Saving a different profile
-  does not unexpectedly activate it.
-- Deleting the selected profile stops monitoring and clears its legacy snapshot;
-  it cannot reappear as a fallback profile. Other profiles remain untouched.
-- The original single-profile configuration migrates once into a Home profile.
-- UI state is activity-owned rather than process-global Compose state. Service
-  updates and returning from Android Settings refresh the visible status.
-- Stop remains available when permissions are missing. Queued scan callbacks
-  also check the persisted enable flag before changing sound.
-- Monitoring is labelled **enabled**, not guaranteed to be running. Android can
-  suspend work; the service status and Resume action explain how to recover.
+## Profile
 
-## Layout and accessibility
+Create, edit, rename, select, and delete saved sound profiles. The editor includes
+an exact Wi-Fi name and separate ringtone/notification levels in and out of range.
 
-A consistent blue Material 3 theme follows the system's light/dark appearance.
-Phones use bottom navigation; windows at least 840 dp wide use a navigation rail.
-Cards and editor controls use two columns when there is sufficient width, and
-stack when the window is narrow or text is enlarged. Content scrolls, the editor's
-Save/Cancel controls stay visible, and system-bar/keyboard insets are respected.
-Buttons have labelled actions and minimum touch heights; sliders announce both
-the sound stream and inside/outside context. The old continuously pulsing spinner
-has been removed.
+Edits remain drafts until Save. Duplicate or blank names and invalid SSIDs show
+inline errors. Drafts survive recreation, and modified drafts require confirmation
+before discarding. Deleting the selected profile requires confirmation and stops
+monitoring. Legacy profiles and saved settings are retained.
 
-## Preview renders
+## Visual and motion design
 
-These are native Compose renders from JVM UI tests using sample profile data,
-not screenshots from physical devices. The editor body scrolls independently
-from its persistent action buttons.
+The app intentionally stays light, including when Android uses dark mode. Soft
+white surfaces, opposing diffuse shadows, charcoal controls, and restrained sage
+status accents replace the blue theme. All shadows use ordinary drawing primitives
+supported from Android 8, without software rendering or bitmap assets.
 
-### Phone overview
+Tab changes crossfade, profile summaries resize smoothly, and the Home profile
+control responds to a press. Wi-Fi waves run only while monitoring is enabled,
+Home is visible, no overlay is open, and the activity is resumed. They stop when
+Android's **Remove animations** setting is enabled, including live changes. Other
+Compose animations follow the system duration scale.
 
-![Phone overview](screenshots/phone-overview.png)
+Content stacks on small windows and enlarged text. Wider windows show Home in two
+columns and paired profile cards. The editor scrolls independently of its fixed
+Save/Cancel actions. System bars use dark icons to match the white appearance.
+Text labels, selected tab/radio semantics, meaningful icon descriptions, and
+48 dp or larger action targets remain available to accessibility services.
 
-### Profile editor
+## Native previews
 
-![Profile editor](screenshots/phone-editor.png)
+Generated from real Compose views with Robolectric native graphics and sample
+profiles. These are not physical-device screenshots.
 
-### Tablet, dark theme
+| Home | Profiles | Editor |
+| --- | --- | --- |
+| ![Home](screenshots/phone-home.png) | ![Profiles](screenshots/phone-profiles.png) | ![Editor](screenshots/phone-editor.png) |
 
-![Tablet dark theme](screenshots/tablet-dark.png)
+![Tablet Home, with Android dark mode enabled](screenshots/tablet-home.png)
 
-### Compact screen with enlarged text
+![Compact screen, 160% text, setup dialog](screenshots/compact-large-text-setup.png)
 
-![Compact layout at 160% font scale](screenshots/compact-large-text-setup.png)
-
-## Validation
-
-The suite includes 18 tests: 3 presence-state regressions, 6 profile-storage and
-validation tests, 8 Compose interaction/render tests, and the existing sample test.
-The UI tests exercise a 390 dp phone, 1040 dp tablet in dark mode, and a 320 dp
-compact screen at 160% text size. They cover Save validation, draft restoration,
-discard confirmation, navigation, empty states, and Stop with missing permissions.
+## Checks
 
 Run with JDK 21:
 
@@ -77,6 +64,16 @@ Run with JDK 21:
 bash gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
-Reports and generated preview images are in `app/build/reports/`. Real-device
-IME, TalkBack, overnight Wi-Fi scanning and reboot checks remain necessary;
-see [the compatibility checklist](ANDROID_COMPATIBILITY.md).
+All 24 tests pass (14 UI, 6 storage/validation, 3 presence, and the existing sample).
+Lint reports zero errors. The UI tests cover a 390 dp phone, a 1040 dp tablet with system dark mode, and a
+320 dp window at 160% text size. They exercise profile selection from Home,
+creation/editing, validation, restored drafts, discard/delete confirmation, both
+tabs, setup access, and Stop with missing permissions. A frame comparison verifies
+that Wi-Fi waves move while enabled and settle when paused.
+
+GitHub's SDK setup explicitly requests `platform-tools`: the action's old default
+also requested Google's retired `tools` package and failed before compilation.
+Command-line tools are pinned to the same version used for local validation.
+
+Physical-device IME, TalkBack, overnight Wi-Fi scanning, and reboot checks remain
+in the [compatibility checklist](ANDROID_COMPATIBILITY.md).
