@@ -68,7 +68,7 @@ class MainActivity : ComponentActivity() {
                         if (profiles.getActiveProfileName() != name) {
                             profiles.selectProfile(name)
                             configurationChanged()
-                            if (profiles.getActiveProfileName() == name) profileNotice = ProfileNotice.selected(name, state.enabled)
+                            if (profiles.getActiveProfileName() == name) profileNotice = ProfileNotice.selected(name, state.monitoringOn)
                         }
                     },
                     onSave = { profile, original ->
@@ -133,7 +133,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun configurationChanged() {
-        if (prefs.getBoolean(MonitoringSettings.ENABLED, false)) MonitoringSettings.status(this, "Profile updated; waiting for a fresh Wi-Fi scan")
+        if (prefs.getBoolean(MonitoringSettings.ENABLED, false)) {
+            if (prefs.getString(MonitoringSettings.RECOVERY_ACTION, null) == "resume") {
+                MonitoringSettings.status(this, "Profile updated. Tap the Wi-Fi button to enable monitoring.", "resume")
+            } else MonitoringSettings.status(this, "Profile updated; waiting for a fresh Wi-Fi scan")
+        }
         else if (prefs.getString(MonitoringSettings.RECOVERY_ACTION, null) != null) {
             MonitoringSettings.status(this, "Profile updated. Start monitoring when you're ready.")
         }
