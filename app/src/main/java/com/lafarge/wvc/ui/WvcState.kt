@@ -17,7 +17,8 @@ data class WvcState(
     val enabled: Boolean = false,
     val status: String = "Choose a profile to get started.",
     val setup: List<SetupItem> = emptyList(),
-    val needsRebootResume: Boolean = false
+    val needsRebootResume: Boolean = false,
+    val recoveryAction: String? = null
 ) {
     val activeProfile: VolumeProfile? get() = profiles.find { it.name == activeName }
     val requiredMissing: Int get() = setup.count { it.required && !it.ready }

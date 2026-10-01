@@ -92,7 +92,7 @@ fun WvcApp(
                                             state.requiredMissing > 0 -> setupOpen = true
                                             else -> onStart()
                                         }
-                                    }, onStop = onStop)
+                                    }, onStop = onStop, onSetupAction = onSetupAction)
                             },
                             controls = {
                                 Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
@@ -207,7 +207,7 @@ private fun HomeLayout(monitor: @Composable () -> Unit, controls: @Composable ()
 }
 
 @Composable
-private fun MonitoringPanel(state: WvcState, visible: Boolean, onStart: () -> Unit, onStop: () -> Unit) {
+private fun MonitoringPanel(state: WvcState, visible: Boolean, onStart: () -> Unit, onStop: () -> Unit, onSetupAction: (String) -> Unit) {
     Column(Modifier.fillMaxWidth().testTag("monitoring-panel"), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         WifiScanner(state.enabled, visible, Modifier.widthIn(max = 266.dp))
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -222,6 +222,13 @@ private fun MonitoringPanel(state: WvcState, visible: Boolean, onStart: () -> Un
             Icon(if (state.enabled) Icons.Default.Close else Icons.Default.PlayArrow, null, Modifier.size(20.dp))
             Spacer(Modifier.width(8.dp))
             Text(when { state.enabled -> "Stop monitoring"; state.activeProfile == null -> "Choose a profile"; state.requiredMissing > 0 -> "Finish setup"; else -> "Start monitoring" })
+        }
+        state.recoveryAction?.let { action ->
+            if (action == "dnd" || action == "location") {
+                TextButton(onClick = { onSetupAction(action) }, modifier = Modifier.testTag("monitoring-recovery")) {
+                    Text(if (action == "dnd") "Allow sound control" else "Review location access")
+                }
+            }
         }
         if (state.enabled) TextButton(onClick = onStart, contentPadding = PaddingValues(horizontal = 12.dp)) {
             Icon(Icons.Default.Refresh, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Resume monitoring")

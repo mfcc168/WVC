@@ -86,6 +86,34 @@ open WVC and tap Resume. No application can guarantee uninterrupted 24/7 executi
 
 ## Validation
 
+### Troubleshooting sound-control access
+
+Location and notification permission do **not** grant Do Not Disturb access.
+Android can require this separate special access when a ringtone or notification
+volume change enters or leaves silent mode. In WVC, open **App setup → Sound-control
+access → Allow sound control**, then allow WVC on Android's Do Not Disturb access
+screen. Earlier APKs label this item **Silent-volume access → Review access**.
+Return to WVC and tap **Resume monitoring** in an older APK; the updated app retries
+monitoring on return if it was waiting for this access. Do not turn on Do Not
+Disturb itself: WVC defers sound changes while a user-enabled DND mode is active.
+
+Setup marks this access required when the selected profile can reach a zero volume
+step (including low percentages rounded to zero), the phone is in silent mode, or
+Android has denied a sound change without this access. Ordinary audible-volume
+profiles can still run without the special access. Both streams are checked before
+either is written. Wi-Fi scan denial and audio denial have separate messages and
+logcat entries under `WvcMonitoring`; neither announces a successful profile change.
+
+If a denial remains after granting access, record the exact new message, phone
+model and Android version. Check Precise location and the system Location switch
+for Wi-Fi failures. For sound failures with access already granted, tap Resume
+from the open app; phone-specific restrictions or Android's background audio rules
+can also prevent changes.
+
+Reference: https://developer.android.com/reference/android/media/AudioManager#setStreamVolume(int,int,int)
+
+### Build and device checks
+
 `bash gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug`
 
 Local validation on 2026-09-28 completed successfully with JDK 21: debug APK built,

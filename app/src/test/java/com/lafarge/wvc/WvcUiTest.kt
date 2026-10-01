@@ -74,6 +74,19 @@ class WvcUiTest {
         compose.onNodeWithText("Stop monitoring").performClick()
         assertTrue(stopped)
     }
+    @Test fun soundPermissionFailureOffersDirectRecoveryAndKeepsStopAvailable() {
+        var action = ""
+        var stopped = false
+        compose.setContent { WVCTheme {
+            WvcApp(ready.copy(enabled = true, status = SoundControlAccess.REQUIRED_MESSAGE, recoveryAction = "dnd"),
+                onStart = {}, onStop = { stopped = true }, onSetupAction = { action = it },
+                onSelect = {}, onSave = { _, _ -> null }, onDelete = {})
+        } }
+        compose.onNodeWithTag("monitoring-recovery").performScrollTo().performClick()
+        assertEquals("dnd", action)
+        compose.onNodeWithText("Stop monitoring").performScrollTo().performClick()
+        assertTrue(stopped)
+    }
     @Test fun editorValidatesWithoutClosingAndDoesNotSaveWhileTyping() {
         var saves = 0
         compose.setContent { WVCTheme { ProfileEditor(null, listOf(home), {}, { saves++; null }) } }

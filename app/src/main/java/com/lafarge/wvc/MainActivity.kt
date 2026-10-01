@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.SharedPreferences
+import android.media.AudioManager
 import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Build
@@ -90,7 +91,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onResume() { super.onResume(); if (::prefs.isInitialized) refresh() }
+    override fun onResume() {
+        super.onResume()
+        if (::prefs.isInitialized) {
+            refresh()
+            // Returning from the special-access screen is a visible, user-initiated resume.
+            if (state.enabled && state.recoveryAction == "dnd" &&
+                getSystemService(NotificationManager::class.java).isNotificationPolicyAccessGranted) startMonitoring()
+        }
+    }
     override fun onPause() {
         profileNotice = null
         super.onPause()
@@ -102,6 +111,9 @@ class MainActivity : ComponentActivity() {
 
     private fun refresh() {
         val notifications = getSystemService(NotificationManager::class.java)
+        val soundAccessRequired = SoundControlAccess.profileNeedsPolicyAccess(
+            getSystemService(AudioManager::class.java), profiles.getActiveProfile()) ||
+            prefs.getString(MonitoringSettings.RECOVERY_ACTION, null) == "dnd"
         val channelVisible = notifications.getNotificationChannel(WiFiScanService.CHANNEL)?.importance != NotificationManager.IMPORTANCE_NONE
         val items = mutableListOf(
             SetupItem("location", "Precise location", "Android requires this to read nearby Wi-Fi names. WVC does not store your coordinates.", MonitoringSettings.hasLocation(this), true, "Allow access"),
@@ -112,15 +124,19 @@ class MainActivity : ComponentActivity() {
                 NotificationManagerCompat.from(this).areNotificationsEnabled() &&
                     (notifications.getNotificationChannel(ProfileChangeNotifier.CHANNEL)?.importance ?: NotificationManager.IMPORTANCE_NONE) >= NotificationManager.IMPORTANCE_HIGH,
                 false, "Enable popups"),
-            SetupItem("dnd", "Silent-volume access", "Allow Do Not Disturb access for volume changes that enter or leave silent mode. WVC respects an active Do Not Disturb mode.", notifications.isNotificationPolicyAccessGranted, false, "Review access")
+            SetupItem("dnd", "Sound-control access", "Android calls this Do Not Disturb access. It is separate from notification permission and is needed for sound changes into or out of silent mode. WVC leaves an active Do Not Disturb mode in place.", notifications.isNotificationPolicyAccessGranted, soundAccessRequired, "Allow sound control")
         )
         if (Build.VERSION.SDK_INT in 29..36) items.add(SetupItem("background", "Restart after reboot", "Choose “Allow all the time” for location so monitoring can restart when your phone reboots.", MonitoringSettings.hasBackgroundLocation(this), false, "Allow background access"))
         state = WvcState(profiles.loadProfiles(), profiles.getActiveProfileName(), prefs.getBoolean(MonitoringSettings.ENABLED, false),
-            prefs.getString(MonitoringSettings.STATUS, "Choose a profile, then start monitoring.").orEmpty(), items, Build.VERSION.SDK_INT >= 37)
+            prefs.getString(MonitoringSettings.STATUS, "Choose a profile, then start monitoring.").orEmpty(), items, Build.VERSION.SDK_INT >= 37,
+            prefs.getString(MonitoringSettings.RECOVERY_ACTION, null))
     }
 
     private fun configurationChanged() {
         if (prefs.getBoolean(MonitoringSettings.ENABLED, false)) MonitoringSettings.status(this, "Profile updated; waiting for a fresh Wi-Fi scan")
+        else if (prefs.getString(MonitoringSettings.RECOVERY_ACTION, null) != null) {
+            MonitoringSettings.status(this, "Profile updated. Start monitoring when you're ready.")
+        }
         refresh()
     }
 
@@ -129,6 +145,14 @@ class MainActivity : ComponentActivity() {
         if (!MonitoringSettings.hasLocation(this)) { requestLocation(); return }
         if (!MonitoringSettings.locationEnabled(this)) { setupAction("locationServices"); return }
         if (!applicationContext.getSystemService(WifiManager::class.java).isWifiEnabled) { setupAction("wifi"); return }
+        if (!getSystemService(NotificationManager::class.java).isNotificationPolicyAccessGranted &&
+            (SoundControlAccess.profileNeedsPolicyAccess(getSystemService(AudioManager::class.java), profiles.getActiveProfile()) ||
+                state.recoveryAction == "dnd")) {
+            MonitoringSettings.status(this, SoundControlAccess.REQUIRED_MESSAGE, "dnd")
+            message = SoundControlAccess.REQUIRED_MESSAGE
+            setupAction("dnd")
+            return
+        }
         prefs.edit().putBoolean(MonitoringSettings.ENABLED, true).apply()
         try {
             stopService(Intent(this, WiFiScanService::class.java))
