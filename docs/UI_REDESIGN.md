@@ -99,11 +99,15 @@ profiles. These are not physical-device screenshots.
 
 ## Checks
 
-Run with JDK 21:
+Run the project checks:
 
 ```sh
 bash gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
+
+The Wi-Fi toggle and inset tabs passed all 47 tests, debug/release APK builds, and
+lint with no errors on GitHub. The native previews above were checked at phone,
+tablet, and enlarged-text sizes.
 
 The test suite includes notification routing, repeat suppression, permissions,
 confirmed service changes, DND deferral, popup dismissal, and replacement timing.
