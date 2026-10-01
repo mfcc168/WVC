@@ -21,7 +21,8 @@ jobs:
           log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@v4
       - run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0'
-      - run: bash gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --no-daemon
+      # Also compile the release variant without access to signing secrets.
+      - run: bash gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease --no-daemon
       - uses: actions/upload-artifact@v4
         if: always()
         with:

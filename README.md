@@ -69,6 +69,15 @@ The APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
 GitHub Actions also uploads it with reports in the `android-check-results`
 artifact of each successful **Android checks** run.
 
+## Automatic APK releases
+
+The **APK release** workflow builds, tests, and signs an APK, then attaches it
+and a SHA-256 checksum to a GitHub Release when you push a matching version tag
+(currently `v1.1`). Manual runs produce downloadable signed builds without
+publishing. Configure the four signing secrets once and follow the
+[APK release guide](docs/APK_RELEASES.md). The manual button becomes available
+after the workflow is merged into the default branch.
+
 ## Project notes
 
 - [Android behavior, permissions, and device testing](docs/ANDROID_COMPATIBILITY.md)

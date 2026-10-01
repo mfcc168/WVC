@@ -3,6 +3,18 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// CI supplies the existing app signing key through environment variables.
+// With no signing environment, local/PR release builds remain unsigned.
+val releaseKeystorePath = providers.environmentVariable("WVC_RELEASE_KEYSTORE_PATH").orNull
+val releaseStorePassword = providers.environmentVariable("WVC_RELEASE_STORE_PASSWORD").orNull
+val releaseKeyAlias = providers.environmentVariable("WVC_RELEASE_KEY_ALIAS").orNull
+val releaseKeyPassword = providers.environmentVariable("WVC_RELEASE_KEY_PASSWORD").orNull
+val releaseSigningValues = listOf(releaseKeystorePath, releaseStorePassword, releaseKeyAlias, releaseKeyPassword)
+val hasReleaseSigning = releaseSigningValues.all { !it.isNullOrBlank() }
+check(releaseSigningValues.none { !it.isNullOrBlank() } || hasReleaseSigning) {
+    "Incomplete WVC release signing configuration. See docs/APK_RELEASES.md."
+}
+
 android {
     namespace = "com.lafarge.wvc"
     compileSdk = 37
@@ -17,8 +29,20 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseKeystorePath!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
