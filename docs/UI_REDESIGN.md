@@ -36,7 +36,8 @@ white surfaces, opposing diffuse shadows, charcoal controls, and restrained sage
 status accents replace the blue theme. All shadows use ordinary drawing primitives
 supported from Android 8, without software rendering or bitmap assets.
 
-Both tabs keep the same white surface and charcoal icons/text. The selected tab
+The navigation bar and both tab buttons share the same light grey base (#F5F6F7),
+with charcoal icons/text. The selected tab
 has a soft inner shadow at the top/left and a white highlight at the bottom/right,
 giving it pressed-in depth without a dark fill. Selection depth animates, and
 both tabs give gentle scale feedback on touch while retaining selected-tab semantics.

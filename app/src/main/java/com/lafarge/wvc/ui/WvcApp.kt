@@ -167,8 +167,9 @@ private fun AppHeader(onSetup: () -> Unit) {
 
 @Composable
 private fun BottomTabs(selected: Int, onSelect: (Int) -> Unit) {
-    Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).navigationBarsPadding().padding(horizontal = 24.dp, vertical = 14.dp), contentAlignment = Alignment.Center) {
-        Row(Modifier.widthIn(max = 440.dp).fillMaxWidth().softSurface(24.dp).selectableGroup().padding(7.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    val tabColor = MaterialTheme.colorScheme.background
+    Box(Modifier.fillMaxWidth().background(tabColor).navigationBarsPadding().padding(horizontal = 24.dp, vertical = 14.dp), contentAlignment = Alignment.Center) {
+        Row(Modifier.widthIn(max = 440.dp).fillMaxWidth().softSurface(24.dp, tabColor).selectableGroup().padding(7.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("Home", "Profile").forEachIndexed { index, label ->
                 val active = selected == index
                 val interaction = remember { MutableInteractionSource() }
@@ -177,7 +178,7 @@ private fun BottomTabs(selected: Int, onSelect: (Int) -> Unit) {
                 val scale by animateFloatAsState(if (pressed) .98f else 1f, tween(140), label = "tab press")
                 val foreground = MaterialTheme.colorScheme.onSurface
                 Row(Modifier.weight(1f).graphicsLayer { scaleX = scale; scaleY = scale }
-                    .clip(RoundedCornerShape(18.dp)).softInset(18.dp, depth).testTag("tab-$label")
+                    .clip(RoundedCornerShape(18.dp)).softInset(18.dp, depth, tabColor).testTag("tab-$label")
                     .selectable(active, interactionSource = interaction, indication = null, role = Role.Tab, onClick = { onSelect(index) })
                     .heightIn(min = 52.dp).padding(horizontal = 8.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {

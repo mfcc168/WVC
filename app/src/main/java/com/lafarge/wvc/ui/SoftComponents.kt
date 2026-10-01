@@ -35,7 +35,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /** Soft opposing shadows, drawn with regular GPU primitives on every supported API. */
-internal fun Modifier.softSurface(radius: Dp = 26.dp): Modifier = this
+internal fun Modifier.softSurface(radius: Dp = 26.dp, color: Color? = null): Modifier = this
     .drawWithCache {
         val corner = radius.toPx()
         val offset = 4.dp.toPx()
@@ -52,11 +52,12 @@ internal fun Modifier.softSurface(radius: Dp = 26.dp): Modifier = this
         }
     }
     .clip(RoundedCornerShape(radius))
-    .background(Brush.linearGradient(listOf(Color(0xFFFCFDFE), Color(0xFFF1F3F5))))
+    .then(if (color == null) Modifier.background(Brush.linearGradient(listOf(Color(0xFFFCFDFE), Color(0xFFF1F3F5))))
+        else Modifier.background(color))
     .border(1.dp, Color.White.copy(alpha = .9f), RoundedCornerShape(radius))
 
-/** White surface with shadows inside its edge; depth animates without changing the fill. */
-internal fun Modifier.softInset(radius: Dp = 18.dp, depth: Float = 1f): Modifier = this
+/** Surface with shadows inside its edge; depth animates without changing the fill. */
+internal fun Modifier.softInset(radius: Dp = 18.dp, depth: Float = 1f, color: Color = Color(0xFFFAFBFC)): Modifier = this
     .drawWithCache {
         val corner = radius.toPx().coerceAtMost(size.minDimension / 2)
         val surface = Path().apply {
@@ -77,7 +78,7 @@ internal fun Modifier.softInset(radius: Dp = 18.dp, depth: Float = 1f): Modifier
             insetShadow(inset, offset) to insetShadow(inset, -offset)
         }
         onDrawBehind {
-            drawPath(surface, Color(0xFFFAFBFC))
+            drawPath(surface, color)
             val amount = depth.coerceIn(0f, 1f)
             shadows.forEach { (shade, light) ->
                 drawPath(shade, Color(0xFF8C969F).copy(alpha = .035f * amount))
