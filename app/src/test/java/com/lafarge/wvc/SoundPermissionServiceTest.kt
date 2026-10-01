@@ -138,7 +138,7 @@ class SoundPermissionServiceTest {
         withService { service ->
             consume(service)
             assertTrue(prefs.getString(MonitoringSettings.STATUS, "")!!.contains("Android denied sound control"))
-            assertNull(prefs.getString(MonitoringSettings.RECOVERY_ACTION, null))
+            assertEquals("resume", prefs.getString(MonitoringSettings.RECOVERY_ACTION, null))
             assertNoSuccess()
         }
     }

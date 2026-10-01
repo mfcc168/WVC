@@ -89,14 +89,14 @@ class WiFiScanService : Service() {
             status("Paused: enable precise location and Location services", "location")
             return
         }
-        val now = SystemClock.elapsedRealtime()
-        if (now - lastRequestMs < SCAN_INTERVAL_MS) return
-        lastRequestMs = now
         try {
             if (!wifi.isWifiEnabled) {
                 status("Paused: turn on Wi-Fi")
                 return
             }
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastRequestMs < SCAN_INTERVAL_MS) return
+            lastRequestMs = now
             if (!wifi.startScan()) scanStatus("Scan throttled; waiting for Android, keeping current volume")
         } catch (e: SecurityException) {
             Log.w(TAG, "Wi-Fi scan request denied", e)
@@ -185,11 +185,11 @@ class WiFiScanService : Service() {
             if (!getSystemService(NotificationManager::class.java).isNotificationPolicyAccessGranted) {
                 status(SoundControlAccess.REQUIRED_MESSAGE, "dnd")
             } else {
-                status("Android denied sound control; tap Resume monitoring. If it continues, check the phone's sound restrictions.")
+                status("Android denied sound control; tap Resume monitoring. If it continues, check the phone's sound restrictions.", "resume")
             }
         } catch (e: IllegalStateException) {
             Log.w(TAG, "Sound settings were not applied", e)
-            status("Android blocked the volume change; open WVC and tap Resume")
+            status("Android blocked the volume change; open WVC and tap Resume", "resume")
         }
     }
 
