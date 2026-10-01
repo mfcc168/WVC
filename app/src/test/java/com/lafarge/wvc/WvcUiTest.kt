@@ -197,4 +197,32 @@ class WvcUiTest {
         assertTrue("Paused waves should stop drawing new animation frames", paused.sameAs(still))
         listOf(first, moving, paused, still).forEach { it.recycle() }
     }
+
+    @Test fun profileChangePopupMatchesThemeAndDismisses() {
+        var notice by mutableStateOf<ProfileNotice?>(ProfileNotice.applied(AppliedSoundProfile("Office", "Office_WiFi", true, 25, 15)))
+        compose.setContent { WVCTheme {
+            WvcApp(ready, onStart = {}, onStop = {}, onSetupAction = {}, onSelect = {}, onSave = { _, _ -> null }, onDelete = {},
+                profileNotice = notice, onNoticeDismissed = { notice = null })
+        } }
+        compose.onNodeWithTag("profile-change-popup").assertIsDisplayed()
+        compose.onNodeWithText("SOUND UPDATED").assertIsDisplayed()
+        compose.onNodeWithText("Office").assertIsDisplayed()
+        screenshot("profile-change-popup")
+        compose.onNodeWithContentDescription("Dismiss profile notification").performClick()
+        compose.onNodeWithTag("profile-change-popup").assertDoesNotExist()
+    }
+    @Test fun newPopupGetsItsOwnTimeoutAndSelectionDoesNotClaimAppliedVolumes() {
+        compose.mainClock.autoAdvance = false
+        var notice by mutableStateOf<ProfileNotice?>(ProfileNotice("Home", "Waiting for a fresh scan.", id = 1))
+        compose.setContent { WVCTheme { ProfileChangePopup(notice) { notice = null } } }
+        compose.mainClock.advanceTimeBy(400)
+        compose.onNodeWithText("PROFILE SELECTED").assertIsDisplayed()
+        compose.onNodeWithText("SOUND UPDATED").assertDoesNotExist()
+        compose.mainClock.advanceTimeBy(4000)
+        compose.runOnIdle { notice = ProfileNotice.applied(AppliedSoundProfile("Office", "WiFi", false, 80, 65)).copy(id = 2) }
+        compose.mainClock.advanceTimeBy(2500)
+        compose.onNodeWithText("Office").assertIsDisplayed()
+        compose.mainClock.advanceTimeBy(4500)
+        compose.onNodeWithTag("profile-change-popup").assertDoesNotExist()
+    }
 }

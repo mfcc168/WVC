@@ -46,7 +46,9 @@ fun WvcApp(
     onSetupAction: (String) -> Unit,
     onSelect: (String) -> Unit,
     onSave: (VolumeProfile, String?) -> String?,
-    onDelete: (String) -> Unit
+    onDelete: (String) -> Unit,
+    profileNotice: ProfileNotice? = null,
+    onNoticeDismissed: () -> Unit = {}
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var editorOpen by rememberSaveable { mutableStateOf(false) }
@@ -145,6 +147,7 @@ fun WvcApp(
             dismissButton = { TextButton(onClick = { deletingName = null }) { Text("Keep profile") } }
         )
     }
+    ProfileChangePopup(profileNotice, onNoticeDismissed)
 }
 
 @Composable

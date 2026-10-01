@@ -19,7 +19,7 @@ class WiFiScanService : Service() {
     private var registered = false
     private var tracker = PresenceTracker()
     private var targetSsid = ""
-    private var applied: String? = null
+    private var applied: AppliedSoundProfile? = null
     private var lastRequestMs = -SCAN_INTERVAL_MS
     private var lastStatus = ""
 
@@ -135,7 +135,7 @@ class WiFiScanService : Service() {
             val default = if (indoor) 50 else 100
             val ring = (profile?.volumes?.get(ringKey) ?: prefs.getInt("${ringKey}_VOLUME", default)).coerceIn(0, 100)
             val alerts = (profile?.volumes?.get(notificationKey) ?: prefs.getInt("${notificationKey}_VOLUME", default)).coerceIn(0, 100)
-            val signature = "$ssid:$indoor:$ring:$alerts"
+            val signature = AppliedSoundProfile(profile?.name ?: "Home", ssid, indoor, ring, alerts)
             if (signature != applied) {
                 // Do not override a user's global DND mode. Android 15+ composes DND rules.
                 val manager = getSystemService(NotificationManager::class.java)
@@ -143,9 +143,20 @@ class WiFiScanService : Service() {
                     status("Do Not Disturb is active; volume change deferred")
                     return
                 }
+                val beforeRing = audio.getStreamVolume(AudioManager.STREAM_RING)
+                val beforeAlerts = audio.getStreamVolume(AudioManager.STREAM_NOTIFICATION)
                 setVolume(AudioManager.STREAM_RING, ring)
                 setVolume(AudioManager.STREAM_NOTIFICATION, alerts)
+                // Some devices link the streams: do not announce success if the second
+                // write undid the first. Matching levels are required on those phones.
+                if (audio.getStreamVolume(AudioManager.STREAM_RING) != targetVolume(AudioManager.STREAM_RING, ring)) {
+                    status("Phone links sound volumes; use matching ringtone and notification levels")
+                    return
+                }
                 applied = signature
+                ProfileChangeNotifier.applied(this, signature,
+                    beforeRing != audio.getStreamVolume(AudioManager.STREAM_RING) ||
+                        beforeAlerts != audio.getStreamVolume(AudioManager.STREAM_NOTIFICATION))
             }
             status(if (indoor) "Inside Wi-Fi area: $ssid" else "Outside Wi-Fi area: $ssid")
         } catch (e: SecurityException) {
@@ -155,8 +166,10 @@ class WiFiScanService : Service() {
         }
     }
 
+    private fun targetVolume(stream: Int, percent: Int) = (audio.getStreamMaxVolume(stream) * percent / 100.0).toInt()
+
     private fun setVolume(stream: Int, percent: Int) {
-        val target = (audio.getStreamMaxVolume(stream) * percent / 100.0).toInt()
+        val target = targetVolume(stream, percent)
         audio.setStreamVolume(stream, target, 0)
         // Android 17 may silently reject audio calls after a background service restart.
         check(audio.getStreamVolume(stream) == target) { "Volume change was not applied" }

@@ -20,6 +20,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.launch
 import com.lafarge.wvc.ui.*
 import com.lafarge.wvc.ui.theme.WVCTheme
 
@@ -28,6 +32,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var profiles: ProfileStorageManager
     private var state by mutableStateOf(WvcState())
     private var message by mutableStateOf<String?>(null)
+    private var profileNotice by mutableStateOf<ProfileNotice?>(null)
     private val preferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> refresh() }
     private val locationRequest = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         refresh()
@@ -44,6 +49,12 @@ class MainActivity : ComponentActivity() {
         prefs = MonitoringSettings.prefs(this)
         profiles = ProfileStorageManager(this)
         profiles.migrateLegacyProfile()
+        ProfileChangeNotifier.createChannel(this)
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                ProfileChangeNotifier.events.collect { profileNotice = ProfileNotice.applied(it) }
+            }
+        }
         prefs.registerOnSharedPreferenceChangeListener(preferenceListener)
         refresh()
         setContent {
@@ -52,7 +63,13 @@ class MainActivity : ComponentActivity() {
                     state = state, message = message, onMessageShown = { message = null },
                     onStart = ::startMonitoring, onStop = ::stopMonitoring,
                     onSetupAction = ::setupAction,
-                    onSelect = { profiles.selectProfile(it); configurationChanged(); message = "Profile selected. Changes apply after a fresh scan." },
+                    onSelect = { name ->
+                        if (profiles.getActiveProfileName() != name) {
+                            profiles.selectProfile(name)
+                            configurationChanged()
+                            if (profiles.getActiveProfileName() == name) profileNotice = ProfileNotice.selected(name, state.enabled)
+                        }
+                    },
                     onSave = { profile, original ->
                         val error = profiles.saveProfile(profile, original)
                         if (error == null) {
@@ -65,13 +82,19 @@ class MainActivity : ComponentActivity() {
                         if (profiles.getActiveProfileName() == name) stopMonitoring()
                         profiles.deleteProfile(name)
                         message = "Profile deleted"
-                    }
+                    },
+                    profileNotice = profileNotice,
+                    onNoticeDismissed = { profileNotice = null }
                 )
             }
         }
     }
 
     override fun onResume() { super.onResume(); if (::prefs.isInitialized) refresh() }
+    override fun onPause() {
+        profileNotice = null
+        super.onPause()
+    }
     override fun onDestroy() {
         if (::prefs.isInitialized) prefs.unregisterOnSharedPreferenceChangeListener(preferenceListener)
         super.onDestroy()
@@ -85,6 +108,10 @@ class MainActivity : ComponentActivity() {
             SetupItem("locationServices", "Location services", "Keep the phone’s Location setting on so Wi-Fi scans can work.", MonitoringSettings.locationEnabled(this), true, "Open settings"),
             SetupItem("wifi", "Wi-Fi", "Wi-Fi must be on. You do not need to connect to the selected network.", applicationContext.getSystemService(WifiManager::class.java).isWifiEnabled, true, "Open Wi-Fi"),
             SetupItem("notifications", "Monitoring notifications", "See scan status and recovery prompts without opening WVC.", NotificationManagerCompat.from(this).areNotificationsEnabled() && channelVisible, false, "Allow notifications"),
+            SetupItem("profileChanges", "Profile change popups", "Show a quiet notification when sound settings change. Android controls on-screen popups; keep this channel’s pop-up setting enabled.",
+                NotificationManagerCompat.from(this).areNotificationsEnabled() &&
+                    (notifications.getNotificationChannel(ProfileChangeNotifier.CHANNEL)?.importance ?: NotificationManager.IMPORTANCE_NONE) >= NotificationManager.IMPORTANCE_HIGH,
+                false, "Enable popups"),
             SetupItem("dnd", "Silent-volume access", "Allow Do Not Disturb access for volume changes that enter or leave silent mode. WVC respects an active Do Not Disturb mode.", notifications.isNotificationPolicyAccessGranted, false, "Review access")
         )
         if (Build.VERSION.SDK_INT in 29..36) items.add(SetupItem("background", "Restart after reboot", "Choose “Allow all the time” for location so monitoring can restart when your phone reboots.", MonitoringSettings.hasBackgroundLocation(this), false, "Allow background access"))
@@ -142,6 +169,14 @@ class MainActivity : ComponentActivity() {
                 prefs.edit().putBoolean("NOTIFICATIONS_REQUESTED", true).apply()
                 notificationRequest.launch(Manifest.permission.POST_NOTIFICATIONS)
             } else openSettings(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+            "profileChanges" -> when {
+                Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED && !prefs.getBoolean("NOTIFICATIONS_REQUESTED", false) -> {
+                    prefs.edit().putBoolean("NOTIFICATIONS_REQUESTED", true).apply()
+                    notificationRequest.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+                !NotificationManagerCompat.from(this).areNotificationsEnabled() -> openSettings(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                else -> openSettings(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS, channelId = ProfileChangeNotifier.CHANNEL)
+            }
             "dnd" -> openSettings(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
             "background" -> if (Build.VERSION.SDK_INT == 29 && MonitoringSettings.hasLocation(this) && !MonitoringSettings.hasBackgroundLocation(this)) {
                 locationRequest.launch(arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION))
@@ -150,8 +185,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun openSettings(action: String, appDetails: Boolean = false) {
+    private fun openSettings(action: String, appDetails: Boolean = false, channelId: String? = null) {
         val intent = Intent(action).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        if (channelId != null) intent.putExtra(Settings.EXTRA_CHANNEL_ID, channelId)
         if (appDetails) intent.data = Uri.parse("package:$packageName")
         try { startActivity(intent) } catch (e: ActivityNotFoundException) { message = "Open Android Settings, then select WVC." }
     }

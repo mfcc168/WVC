@@ -43,7 +43,38 @@ Save/Cancel actions. System bars use dark icons to match the white appearance.
 Text labels, selected tab/radio semantics, meaningful icon descriptions, and
 48 dp or larger action targets remain available to accessibility services.
 
+## Profile-change popups
+
+Selecting a different profile shows a white, softly raised **Profile selected**
+popup. It explains whether WVC is waiting for a fresh scan or for monitoring to
+start. It never claims the new volumes have already been applied.
+
+After the monitoring service successfully applies a profile, an animated
+**Sound updated** popup shows the profile name, Wi-Fi range state, and its
+ringtone/notification percentages. It has a close button and dismisses after six
+seconds, extended by Android accessibility timeout preferences. A newer update
+replaces the previous popup and starts a fresh timer. It appears above an open
+profile editor without taking keyboard focus.
+
+When WVC is in the background, the same confirmed change uses Android's native
+notification template on a separate **Sound profile changes** channel. It is
+configured for on-screen popups, without sound or vibration by default. Tapping
+it opens WVC; it clears after a minute. Android, Do Not Disturb, and the user's
+channel settings control actual heads-up display. **App setup → Profile change
+popups** opens the relevant permission/channel settings. Lock-screen public
+content omits the profile name and volume details.
+
+Repeated scans and unchanged service restarts do not generate repeat alerts.
+Blocked/deferred changes do not announce success. In-app events are not replayed
+when the app reopens, and a change uses either the in-app popup or a system
+notification. The ongoing monitoring notification remains separate.
+
+Android references: [notification channels](https://developer.android.com/develop/ui/views/notifications/channels)
+and [notification templates](https://developer.android.com/develop/ui/views/notifications/custom-notification).
+
 ## Native previews
+
+![Profile-change popup](screenshots/profile-change-popup.png)
 
 Generated from real Compose views with Robolectric native graphics and sample
 profiles. These are not physical-device screenshots.
@@ -64,8 +95,9 @@ Run with JDK 21:
 bash gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
-All 24 tests pass (14 UI, 6 storage/validation, 3 presence, and the existing sample).
-Lint reports zero errors. The UI tests cover a 390 dp phone, a 1040 dp tablet with system dark mode, and a
+The debug APK builds, lint reports zero errors, and all 35 tests pass, including 16 UI tests. The test suite includes notification routing, repeat suppression, permissions,
+confirmed service changes, DND deferral, popup dismissal, and replacement timing.
+The UI tests cover a 390 dp phone, a 1040 dp tablet with system dark mode, and a
 320 dp window at 160% text size. They exercise profile selection from Home,
 creation/editing, validation, restored drafts, discard/delete confirmation, both
 tabs, setup access, and Stop with missing permissions. A frame comparison verifies
