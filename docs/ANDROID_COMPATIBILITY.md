@@ -9,7 +9,7 @@ app; a database, server, or large architecture rewrite is not needed.
 The previous implementation requested scans every 10 seconds (twice at startup),
 ignored scan success/freshness, and reapplied sound levels on every broadcast.
 Android throttles scans, so cached results could make the app choose the wrong
-profile and repeated writes could undo a user's manual volume adjustment.
+profile and repeated writes did not check whether the sound levels already matched.
 MainActivity.onDestroy also stopped the service, including on activity recreation.
 The Start indicator was UI-only; Stop was not persisted and reboot could re-enable
 it. Background location was declared but never requested. Startup exceptions were
@@ -25,12 +25,20 @@ Notification policy access needed for some silent-volume transitions was missing
 - Require successful scan broadcasts and observations at most 30 seconds old.
   Duplicate/out-of-order snapshots do not advance the presence state machine.
   One fresh sighting enters the area; two consecutive fresh misses leave it.
-  Empty, failed, stale, disabled-Wi-Fi and unavailable-location results hold the
-  existing volume. In a place with no detectable access points, absence cannot
-  be timestamp-verified and the old volume is intentionally retained.
-- Apply volumes on a confirmed state/configuration change, not every scan.
+  Empty, failed and stale results retain the last confirmed area. In a place with
+  no detectable access points, absence cannot be timestamp-verified. Wi-Fi-off and
+  unavailable-location states pause corrections until a fresh observation.
+- Compare actual ringtone/notification levels with their targets on each confirmed
+  scan and on a separate five-second service timer. Restore manual changes and
+  apply edited levels for the last successfully confirmed network/area without
+  increasing Wi-Fi scan frequency. Write only streams whose levels differ.
+  Selecting a different SSID discards the old correction target and waits for a
+  fresh observation of that network. Stop disables corrections and service
+  destruction removes the timer. The timer uses no wake lock or exact alarm;
+  device sleep and service suspension can delay it.
   Respect active global DND; report denied or silently ignored audio changes.
-  Ringtone/notification streams may be linked by the device manufacturer.
+  Ringtone/notification streams may be linked by the device manufacturer; an
+  incompatible pair reports the conflict without a repeated correction loop.
 - Persist user enable/disable intent independently of service lifetime. Do not
   stop monitoring when the activity closes. Use START_STICKY, with no exact alarm
   or attempt to bypass force-stop or Android's background restrictions.
@@ -136,7 +144,11 @@ Before release, test on physical devices at API 26/29/31/33/34/35/36/37:
    Confirm activity destruction does not stop monitoring.
 3. Enter/leave SSID range while unconnected. Confirm two fresh misses are required;
    failed/stale scans, duplicate broadcasts and Wi-Fi-off do not apply outdoors.
-4. Change profile/volume settings; confirm next fresh observation uses new values.
+4. Change ringtone/notification levels manually while monitoring is on; confirm
+   restoration in about five seconds while the phone is awake, including with
+   Wi-Fi scans throttled. Stop monitoring and confirm manual levels remain.
+   Edit levels for the confirmed network; confirm the next volume check uses
+   them. Select a different SSID; confirm it waits for its own fresh observation.
 5. Stop then reboot: no restart. Enable then reboot: API 26–36 resumes if permitted;
    API 37 shows Resume. Test denied background location and notifications.
 6. Test zero volume, linked ringtone/notification streams, DND on/off, revoked

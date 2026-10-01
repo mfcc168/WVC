@@ -30,6 +30,13 @@ class WiFiScanService : Service() {
             handler.postDelayed(this, SCAN_INTERVAL_MS)
         }
     }
+    private val volumeTask = object : Runnable {
+        override fun run() {
+            if (!prefs.getBoolean(MonitoringSettings.ENABLED, false)) return
+            reconcileVolumes()
+            handler.postDelayed(this, VOLUME_CHECK_INTERVAL_MS)
+        }
+    }
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == WifiManager.SCAN_RESULTS_AVAILABLE_ACTION) {
@@ -80,6 +87,8 @@ class WiFiScanService : Service() {
         }
         handler.removeCallbacks(scanTask)
         handler.post(scanTask)
+        handler.removeCallbacks(volumeTask)
+        handler.post(volumeTask)
         return START_STICKY
     }
 
@@ -141,13 +150,53 @@ class WiFiScanService : Service() {
                 scanStatus("Confirming Wi-Fi area; keeping current volume")
                 return
             }
-            val ringKey = if (indoor) VolumeProfile.RINGTONE_INDOOR else VolumeProfile.RINGTONE_OUTDOOR
-            val notificationKey = if (indoor) VolumeProfile.NOTIFICATION_INDOOR else VolumeProfile.NOTIFICATION_OUTDOOR
-            val default = if (indoor) 50 else 100
-            val ring = (profile?.volumes?.get(ringKey) ?: prefs.getInt("${ringKey}_VOLUME", default)).coerceIn(0, 100)
-            val alerts = (profile?.volumes?.get(notificationKey) ?: prefs.getInt("${notificationKey}_VOLUME", default)).coerceIn(0, 100)
-            val signature = AppliedSoundProfile(profile?.name ?: "Home", ssid, indoor, ring, alerts)
-            if (signature != applied) {
+            applyProfile(soundProfile(profile, ssid, indoor))
+        } catch (e: SecurityException) {
+            soundDenied(e)
+        } catch (e: IllegalStateException) {
+            soundBlocked(e)
+        }
+    }
+
+    private fun soundProfile(profile: VolumeProfile?, ssid: String, indoor: Boolean): AppliedSoundProfile {
+        val ringKey = if (indoor) VolumeProfile.RINGTONE_INDOOR else VolumeProfile.RINGTONE_OUTDOOR
+        val notificationKey = if (indoor) VolumeProfile.NOTIFICATION_INDOOR else VolumeProfile.NOTIFICATION_OUTDOOR
+        val default = if (indoor) 50 else 100
+        val ring = (profile?.volumes?.get(ringKey) ?: prefs.getInt("${ringKey}_VOLUME", default)).coerceIn(0, 100)
+        val alerts = (profile?.volumes?.get(notificationKey) ?: prefs.getInt("${notificationKey}_VOLUME", default)).coerceIn(0, 100)
+        return AppliedSoundProfile(profile?.name ?: "Home", ssid, indoor, ring, alerts)
+    }
+
+    private fun reconcileVolumes() {
+        if (prefs.getString(MonitoringSettings.RECOVERY_ACTION, null) == "resume") return
+        val confirmed = applied ?: return
+        if (!MonitoringSettings.hasLocation(this) || !MonitoringSettings.locationEnabled(this) || !wifi.isWifiEnabled) {
+            // After monitoring readiness is lost, confirm the area again before enforcing it.
+            applied = null
+            return
+        }
+        val profile = ProfileStorageManager(this).getActiveProfile()
+        val ssid = profile?.ssid ?: prefs.getString("HOME_SSID", "").orEmpty()
+        if (ssid != confirmed.ssid) {
+            // Selecting a different network must never reuse the old network's range state.
+            applied = null
+            return
+        }
+        // The last successfully confirmed area is sufficient to restore manual changes
+        // or apply edited levels for this same network, without requesting another scan.
+        applyProfile(soundProfile(profile, ssid, confirmed.indoor), refreshStatus = false)
+    }
+
+    private fun applyProfile(signature: AppliedSoundProfile, refreshStatus: Boolean = true) {
+        try {
+            val ring = signature.ringtone
+            val alerts = signature.notifications
+            val beforeRing = audio.getStreamVolume(AudioManager.STREAM_RING)
+            val beforeAlerts = audio.getStreamVolume(AudioManager.STREAM_NOTIFICATION)
+            val ringTarget = targetVolume(AudioManager.STREAM_RING, ring)
+            val alertsTarget = targetVolume(AudioManager.STREAM_NOTIFICATION, alerts)
+            val volumeChanged = beforeRing != ringTarget || beforeAlerts != alertsTarget
+            if (signature != applied || volumeChanged) {
                 // Do not override a user's global DND mode. Android 15+ composes DND rules.
                 val manager = getSystemService(NotificationManager::class.java)
                 if (audio.isVolumeFixed) {
@@ -164,13 +213,16 @@ class WiFiScanService : Service() {
                     status("Do Not Disturb is active; volume change deferred")
                     return
                 }
-                val beforeRing = audio.getStreamVolume(AudioManager.STREAM_RING)
-                val beforeAlerts = audio.getStreamVolume(AudioManager.STREAM_NOTIFICATION)
-                setVolume(AudioManager.STREAM_RING, ring)
-                setVolume(AudioManager.STREAM_NOTIFICATION, alerts)
+                if (beforeRing != ringTarget) setVolume(AudioManager.STREAM_RING, ring)
+                if (audio.getStreamVolume(AudioManager.STREAM_NOTIFICATION) != alertsTarget) {
+                    setVolume(AudioManager.STREAM_NOTIFICATION, alerts)
+                }
                 // Some devices link the streams: do not announce success if the second
                 // write undid the first. Matching levels are required on those phones.
-                if (audio.getStreamVolume(AudioManager.STREAM_RING) != targetVolume(AudioManager.STREAM_RING, ring)) {
+                if (audio.getStreamVolume(AudioManager.STREAM_RING) != ringTarget ||
+                    audio.getStreamVolume(AudioManager.STREAM_NOTIFICATION) != alertsTarget) {
+                    // Retry on a fresh scan/configuration, not in a rapid correction loop.
+                    applied = null
                     status("Phone links sound volumes; use matching ringtone and notification levels")
                     return
                 }
@@ -178,19 +230,29 @@ class WiFiScanService : Service() {
                 ProfileChangeNotifier.applied(this, signature,
                     beforeRing != audio.getStreamVolume(AudioManager.STREAM_RING) ||
                         beforeAlerts != audio.getStreamVolume(AudioManager.STREAM_NOTIFICATION))
+                status(if (signature.indoor) "Inside Wi-Fi area: ${signature.ssid}" else "Outside Wi-Fi area: ${signature.ssid}")
+            } else if (refreshStatus) {
+                status(if (signature.indoor) "Inside Wi-Fi area: ${signature.ssid}" else "Outside Wi-Fi area: ${signature.ssid}")
             }
-            status(if (indoor) "Inside Wi-Fi area: $ssid" else "Outside Wi-Fi area: $ssid")
         } catch (e: SecurityException) {
-            Log.w(TAG, "Changing sound settings denied", e)
-            if (!getSystemService(NotificationManager::class.java).isNotificationPolicyAccessGranted) {
-                status(SoundControlAccess.REQUIRED_MESSAGE, "dnd")
-            } else {
-                status("Android denied sound control; tap the Wi-Fi button to try again. If it continues, check the phone's sound restrictions.", "resume")
-            }
+            soundDenied(e)
         } catch (e: IllegalStateException) {
-            Log.w(TAG, "Sound settings were not applied", e)
-            status("Android blocked the volume change; open WVC and tap the Wi-Fi button", "resume")
+            soundBlocked(e)
         }
+    }
+
+    private fun soundDenied(error: SecurityException) {
+        Log.w(TAG, "Changing sound settings denied", error)
+        if (!getSystemService(NotificationManager::class.java).isNotificationPolicyAccessGranted) {
+            status(SoundControlAccess.REQUIRED_MESSAGE, "dnd")
+        } else {
+            status("Android denied sound control; tap the Wi-Fi button to try again. If it continues, check the phone's sound restrictions.", "resume")
+        }
+    }
+
+    private fun soundBlocked(error: IllegalStateException) {
+        Log.w(TAG, "Sound settings were not applied", error)
+        status("Android blocked the volume change; open WVC and tap the Wi-Fi button", "resume")
     }
 
     private fun targetVolume(stream: Int, percent: Int) = SoundControlAccess.targetVolume(audio, stream, percent)
@@ -242,6 +304,7 @@ class WiFiScanService : Service() {
         const val CHANNEL = "wifi_monitoring_v2"
         // Android can throttle further; passive system scan broadcasts are also consumed.
         const val SCAN_INTERVAL_MS = 120_000L
+        const val VOLUME_CHECK_INTERVAL_MS = 5_000L
         const val MAX_SCAN_AGE_US = 30_000_000L
     }
 }

@@ -4,6 +4,13 @@ WVC changes ringtone and notification volume when a selected Wi-Fi network is
 nearby. It includes named sound profiles, background monitoring, and a light
 Compose interface.
 
+While monitoring is on, WVC checks the phone's ringtone and notification levels
+every five seconds and restores the selected profile's levels for the last
+confirmed Wi-Fi area. Editing that profile's levels also takes effect on the next
+check. Choosing a different Wi-Fi network waits for its own fresh scan. Tap the
+Wi-Fi button to stop monitoring when you want to keep manual volume changes.
+Checks can be delayed while Android sleeps or suspends the service.
+
 ## Open and run in Android Studio
 
 This branch targets Android 17. **Use Android Studio Quail 2 (2026.1.2) or a

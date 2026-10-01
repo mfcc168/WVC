@@ -36,7 +36,7 @@ data class ProfileNotice(
     companion object {
         fun applied(profile: AppliedSoundProfile) = ProfileNotice(profile.name, profile.area, profile)
         fun selected(name: String, monitoring: Boolean) = ProfileNotice(name,
-            if (monitoring) "Changes apply after a fresh Wi-Fi scan." else "Start monitoring to use these sound settings.")
+            if (monitoring) "Monitoring applies this profile when its Wi-Fi area is confirmed." else "Start monitoring to use these sound settings.")
     }
 }
 

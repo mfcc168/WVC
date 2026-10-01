@@ -14,7 +14,8 @@ navigation stays available on phones and tablets.
   button shows off and starts monitoring on its next tap. The waves represent
   monitoring intent, not a promise of continuous or successful radio scans.
 - A profile picker directly on Home. Selection closes the picker and updates the
-  saved active profile; the service applies volumes after a fresh scan.
+  saved active profile. For the already confirmed network, the next volume check
+  applies edited levels; selecting a different network waits for a fresh scan.
 - In-range and out-of-range ringtone/notification summaries, with an edit action.
 - A setup button opens permission readiness, Android settings links, and
   reboot/battery guidance without adding a third tab.
@@ -59,8 +60,8 @@ Text labels, selected tab/radio semantics, meaningful icon descriptions, and
 ## Profile-change popups
 
 Selecting a different profile shows a white, softly raised **Profile selected**
-popup. It explains whether WVC is waiting for a fresh scan or for monitoring to
-start. It never claims the new volumes have already been applied.
+popup. It explains whether WVC is waiting for the Wi-Fi area to be confirmed or
+for monitoring to start. It never claims the new volumes have already been applied.
 
 After the monitoring service successfully applies a profile, an animated
 **Sound updated** popup shows the profile name, Wi-Fi range state, and its
@@ -108,13 +109,16 @@ Run the project checks:
 bash gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
-The shared shadow update, Wi-Fi toggle, and inset tabs passed all 47 tests,
+The shared shadow update, Wi-Fi toggle, and inset tabs passed the Android tests,
 debug/release APK builds, and lint with no errors on GitHub. The native previews
 above were refreshed for the single-shadow surfaces and checked at phone, tablet,
 and enlarged-text sizes.
 
 The test suite includes notification routing, repeat suppression, permissions,
 confirmed service changes, DND deferral, popup dismissal, and replacement timing.
+Service regressions also cover manual-volume restoration, same-network profile
+edits, corrections while Wi-Fi scans are throttled, new-network confirmation,
+stop/destruction, revoked access, linked streams, and rejected audio writes.
 The UI tests cover a 390 dp phone, a 1040 dp tablet with system dark mode, and a
 320 dp window at 160% text size. They exercise profile selection from Home,
 creation/editing, validation, restored drafts, discard/delete confirmation, both

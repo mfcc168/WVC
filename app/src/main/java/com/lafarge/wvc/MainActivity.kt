@@ -136,7 +136,7 @@ class MainActivity : ComponentActivity() {
         if (prefs.getBoolean(MonitoringSettings.ENABLED, false)) {
             if (prefs.getString(MonitoringSettings.RECOVERY_ACTION, null) == "resume") {
                 MonitoringSettings.status(this, "Profile updated. Tap the Wi-Fi button to enable monitoring.", "resume")
-            } else MonitoringSettings.status(this, "Profile updated; waiting for a fresh Wi-Fi scan")
+            } else MonitoringSettings.status(this, "Profile updated; waiting for monitoring to apply sound settings")
         }
         else if (prefs.getString(MonitoringSettings.RECOVERY_ACTION, null) != null) {
             MonitoringSettings.status(this, "Profile updated. Start monitoring when you're ready.")
