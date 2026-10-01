@@ -59,6 +59,11 @@ the requested nearby-area behavior.
 
 ## Compatibility and setup
 
+For Android Studio installation, SDK setup, and the "Latest supported version is
+AGP 8.8.0" error, follow the [project setup guide](../README.md#open-and-run-in-android-studio).
+The pinned AGP 9.3 requires Android Studio Quail 2 (2026.1.2) or a newer release
+that supports AGP 9.3; an IDE limited to AGP 8.8 cannot sync this configuration.
+
 Build: compile/target API 37 (Android 17), minimum API 26 (Android 8), AGP 9.3.0,
 Gradle 9.5.0, built-in Kotlin with Compose compiler 2.2.10. Use JDK 21 for CI
 (AGP's documented minimum is 17). The old Crashlytics **build tools** runtime
