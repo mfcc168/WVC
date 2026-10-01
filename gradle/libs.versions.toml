@@ -1,6 +1,5 @@
 [versions]
-# Requires Android Studio Quail 2 (2026.1.2) or newer; see README.md for setup.
-agp = "9.3.0"
+agp = "9.4.1"
 kotlin = "2.2.10"
 coreKtx = "1.15.0"
 junit = "4.13.2"
