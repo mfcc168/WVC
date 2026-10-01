@@ -161,7 +161,7 @@ class WiFiScanService : Service() {
         // Keep Wi-Fi permission failures separate from failures to change sound settings.
         val scanResults = try {
             if (!wifi.isWifiEnabled) return
-            wifi.scanResults
+            wifi.scanResults.orEmpty()
         } catch (e: SecurityException) {
             Log.w(TAG, "Reading Wi-Fi scan results denied", e)
             status("Wi-Fi scan access denied; allow Precise location for WVC and keep Location on", "location")
