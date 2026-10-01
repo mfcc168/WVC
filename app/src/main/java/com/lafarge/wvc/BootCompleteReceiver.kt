@@ -10,8 +10,8 @@ class BootCompleteReceiver : BroadcastReceiver() {
         if (intent?.action != Intent.ACTION_BOOT_COMPLETED && intent?.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
         if (!MonitoringSettings.prefs(context).getBoolean(MonitoringSettings.ENABLED, false)) return
         if (android.os.Build.VERSION.SDK_INT >= 37) {
-            val message = "Android 17 requires you to open WVC and tap Resume after reboot or update"
-            MonitoringSettings.status(context, message)
+            val message = "Open WVC and tap the Wi-Fi button to enable monitoring after reboot or update"
+            MonitoringSettings.status(context, message, "resume")
             val manager = context.getSystemService(android.app.NotificationManager::class.java)
             manager.createNotificationChannel(android.app.NotificationChannel(
                 WiFiScanService.CHANNEL, "Wi-Fi monitoring", android.app.NotificationManager.IMPORTANCE_LOW))
@@ -27,15 +27,15 @@ class BootCompleteReceiver : BroadcastReceiver() {
         }
         if (!MonitoringSettings.hasLocation(context) || !MonitoringSettings.hasBackgroundLocation(context) ||
             !MonitoringSettings.locationEnabled(context)) {
-            MonitoringSettings.status(context, "Open WVC: precise and always-allowed location are needed after reboot")
+            MonitoringSettings.status(context, "Open WVC: precise and always-allowed location are needed after reboot", "resume")
             return
         }
         try {
             ContextCompat.startForegroundService(context, Intent(context, WiFiScanService::class.java))
         } catch (e: SecurityException) {
-            MonitoringSettings.status(context, "Open WVC to resume: permission unavailable at startup")
+            MonitoringSettings.status(context, "Open WVC and tap the Wi-Fi button: permission unavailable at startup", "resume")
         } catch (e: IllegalStateException) {
-            MonitoringSettings.status(context, "Android blocked automatic startup; open WVC to resume")
+            MonitoringSettings.status(context, "Android blocked automatic startup; open WVC and tap the Wi-Fi button", "resume")
         }
     }
 }

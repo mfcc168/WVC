@@ -54,7 +54,10 @@ class WvcUiTest {
     }
     @Test fun phoneHomeRenders() {
         render()
-        compose.onNodeWithText("Start monitoring").assertIsDisplayed()
+        compose.onNodeWithTag("wifi-toggle").assertIsDisplayed().assertIsOff().assertHasClickAction()
+        compose.onNodeWithText("Start monitoring").assertDoesNotExist()
+        compose.onNodeWithText("Stop monitoring").assertDoesNotExist()
+        compose.onNodeWithText("Resume monitoring").assertDoesNotExist()
         screenshot("phone-home")
     }
     @Test @Config(qualifiers = "w1040dp-h900dp-night-xhdpi") fun tabletStaysWhiteInSystemDarkMode() {
@@ -71,7 +74,7 @@ class WvcUiTest {
     @Test fun stopIsAvailableEvenWhenPermissionsAreMissing() {
         var stopped = false
         render(ready.copy(enabled = true, setup = listOf(SetupItem("location", "Location", "Missing", false, true, "Allow"))), onStop = { stopped = true })
-        compose.onNodeWithText("Stop monitoring").performClick()
+        compose.onNodeWithTag("wifi-toggle").assertIsOn().performClick()
         assertTrue(stopped)
     }
     @Test fun soundPermissionFailureOffersDirectRecoveryAndKeepsStopAvailable() {
@@ -84,8 +87,43 @@ class WvcUiTest {
         } }
         compose.onNodeWithTag("monitoring-recovery").performScrollTo().performClick()
         assertEquals("dnd", action)
-        compose.onNodeWithText("Stop monitoring").performScrollTo().performClick()
+        compose.onNodeWithTag("wifi-toggle").performScrollTo().performClick()
         assertTrue(stopped)
+    }
+    @Test fun wifiButtonTogglesAndRestartsAfterAndroidPausesMonitoring() {
+        var state by mutableStateOf(ready)
+        var starts = 0
+        var stops = 0
+        compose.setContent { WVCTheme {
+            WvcApp(state, onStart = { starts++; state = state.copy(enabled = true, recoveryAction = null) },
+                onStop = { stops++; state = state.copy(enabled = false, recoveryAction = null) },
+                onSetupAction = {}, onSelect = {}, onSave = { _, _ -> null }, onDelete = {})
+        } }
+        compose.onNodeWithTag("wifi-toggle").assertIsOff().performClick()
+        compose.onNodeWithTag("wifi-toggle").assertIsOn().performClick()
+        compose.onNodeWithTag("wifi-toggle").assertIsOff()
+        assertEquals(1, starts)
+        assertEquals(1, stops)
+        compose.runOnIdle { state = state.copy(enabled = true, recoveryAction = "resume") }
+        compose.onNodeWithTag("wifi-toggle").assertIsOff().performClick()
+        compose.onNodeWithTag("wifi-toggle").assertIsOn()
+        assertEquals(2, starts)
+        assertEquals(1, stops)
+    }
+    @Test fun wifiButtonGuidesProfileCreationAndMissingPermissions() {
+        var state by mutableStateOf(WvcState())
+        var starts = 0
+        compose.setContent { WVCTheme {
+            WvcApp(state, onStart = { starts++ }, onStop = {}, onSetupAction = {},
+                onSelect = {}, onSave = { _, _ -> null }, onDelete = {})
+        } }
+        compose.onNodeWithTag("wifi-toggle").performClick()
+        compose.onNodeWithTag("profile-editor").assertExists()
+        compose.onNodeWithText("Cancel").performClick()
+        compose.runOnIdle { state = ready.copy(setup = listOf(SetupItem("location", "Precise location", "Missing", false, true, "Allow access"))) }
+        compose.onNodeWithTag("wifi-toggle").performClick()
+        compose.onNodeWithText("App setup").assertIsDisplayed()
+        assertEquals(0, starts)
     }
     @Test fun editorValidatesWithoutClosingAndDoesNotSaveWhileTyping() {
         var saves = 0
@@ -126,7 +164,7 @@ class WvcUiTest {
                 WVCTheme { WvcApp(ready, onStart = {}, onStop = {}, onSetupAction = {}, onSelect = {}, onSave = { _, _ -> null }, onDelete = {}) }
             }
         }
-        compose.onNodeWithText("Start monitoring").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("wifi-toggle").performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription("App setup").performClick()
         compose.onNodeWithText("Precise location").performScrollTo().assertIsDisplayed()
         screenshot("compact-large-text-setup")
@@ -151,7 +189,11 @@ class WvcUiTest {
     @Test fun profilePageHasTwoIconTabsAndEditsExistingProfile() {
         render()
         compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)).assertCountEquals(2)
+        compose.onNodeWithTag("tab-Home").assertIsSelected()
+        compose.onNodeWithTag("tab-Profile").assertIsNotSelected()
         compose.onNodeWithText("Profile", useUnmergedTree = true).performClick()
+        compose.onNodeWithTag("tab-Profile").assertIsSelected()
+        compose.onNodeWithTag("tab-Home").assertIsNotSelected()
         compose.onNodeWithContentDescription("Edit Home").performScrollTo().performClick()
         compose.onNodeWithTag("profile-name").assertTextContains("Home")
         compose.onNodeWithTag("profile-ssid").assertTextContains("Home_WiFi")
@@ -176,11 +218,11 @@ class WvcUiTest {
     }
     @Test fun activeMonitoringAndProfilePickerRemainInteractiveDuringWaves() {
         render(ready.copy(enabled = true, status = "Home_WiFi is nearby. Inside volumes applied."))
-        compose.onNodeWithContentDescription("Wi-Fi monitoring enabled").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Wi-Fi monitoring").assertIsDisplayed().assertIsOn()
         compose.onNodeWithTag("choose-profile").performScrollTo().performClick()
         compose.onNodeWithText("Choose a profile").assertIsDisplayed()
         compose.onNodeWithContentDescription("Close Choose a profile").performClick()
-        compose.onNodeWithText("Stop monitoring").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("wifi-toggle").performScrollTo().assertIsDisplayed()
         screenshot("phone-monitoring")
     }
 

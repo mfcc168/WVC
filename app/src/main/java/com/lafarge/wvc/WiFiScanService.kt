@@ -61,11 +61,11 @@ class WiFiScanService : Service() {
             ServiceCompat.startForeground(this, 1, notification("Waiting for a fresh Wi-Fi scan"),
                 if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION else 0)
         } catch (e: SecurityException) {
-            MonitoringSettings.status(this, "Location permission required; open WVC to resume")
+            MonitoringSettings.status(this, "Location permission required; open WVC and tap the Wi-Fi button", "resume")
             stopSelf()
             return START_NOT_STICKY
         } catch (e: IllegalStateException) {
-            MonitoringSettings.status(this, "Android blocked startup; open WVC to resume")
+            MonitoringSettings.status(this, "Android blocked startup; open WVC and tap the Wi-Fi button", "resume")
             stopSelf()
             return START_NOT_STICKY
         }
@@ -185,11 +185,11 @@ class WiFiScanService : Service() {
             if (!getSystemService(NotificationManager::class.java).isNotificationPolicyAccessGranted) {
                 status(SoundControlAccess.REQUIRED_MESSAGE, "dnd")
             } else {
-                status("Android denied sound control; tap Resume monitoring. If it continues, check the phone's sound restrictions.", "resume")
+                status("Android denied sound control; tap the Wi-Fi button to try again. If it continues, check the phone's sound restrictions.", "resume")
             }
         } catch (e: IllegalStateException) {
             Log.w(TAG, "Sound settings were not applied", e)
-            status("Android blocked the volume change; open WVC and tap Resume", "resume")
+            status("Android blocked the volume change; open WVC and tap the Wi-Fi button", "resume")
         }
     }
 

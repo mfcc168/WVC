@@ -41,8 +41,8 @@ Notification policy access needed for some silent-volume transitions was missing
 - Android 17 requires a user-started foreground service with while-in-use
   capabilities for background volume APIs. After reboot/update, show a Resume
   notification instead of running a boot-started service that silently cannot
-  change volume. Open WVC and tap Resume. If notifications are denied, open WVC
-  manually. A foreground Resume recreates the service to obtain those capabilities.
+  change volume. Open WVC and tap the Wi-Fi button. If notifications are denied,
+  open WVC manually. This recreates the service to obtain those capabilities.
 
 ## Alternatives
 
@@ -78,11 +78,12 @@ library was removed; it was not a Crashlytics SDK integration.
 | 14–16 / API 34–36 | Typed location foreground service; background startup permission checks; DND remains user-controlled |
 | 17 / API 37 | Same permissions, plus explicit Resume after boot/update for background audio capabilities |
 
-After upgrading from 1.0, tap Start once to opt into the new persisted monitoring setting.
+After upgrading from 1.0, tap the Wi-Fi button once to enable monitoring.
 Grant notification policy access if using silent volume settings. WVC does not
 promise to disable a user's DND mode on exit. Manufacturer battery restrictions,
 force-stop, revoked permissions, and Doze can stop or delay work. After force-stop,
-open WVC and tap Resume. No application can guarantee uninterrupted 24/7 execution.
+open WVC and use the Wi-Fi button to switch monitoring off and on. No application
+can guarantee uninterrupted 24/7 execution.
 
 ## Validation
 
@@ -106,8 +107,8 @@ logcat entries under `WvcMonitoring`; neither announces a successful profile cha
 
 If a denial remains after granting access, record the exact new message, phone
 model and Android version. Check Precise location and the system Location switch
-for Wi-Fi failures. For sound failures with access already granted, tap Resume
-from the open app; phone-specific restrictions or Android's background audio rules
+for Wi-Fi failures. For sound failures with access already granted, tap the Wi-Fi
+button from the open app; phone-specific restrictions or Android's background audio rules
 can also prevent changes.
 
 Reference: https://developer.android.com/reference/android/media/AudioManager#setStreamVolume(int,int,int)

@@ -22,4 +22,6 @@ data class WvcState(
 ) {
     val activeProfile: VolumeProfile? get() = profiles.find { it.name == activeName }
     val requiredMissing: Int get() = setup.count { it.required && !it.ready }
+    // Saved monitoring intent can survive a reboot even when Android requires a fresh start.
+    val monitoringOn: Boolean get() = enabled && recoveryAction != "resume"
 }

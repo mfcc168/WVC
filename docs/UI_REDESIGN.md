@@ -5,9 +5,14 @@ navigation stays available on phones and tablets.
 
 ## Home
 
-- A large, sculpted Wi-Fi indicator with three gently expanding waves.
-- Explicit monitoring status and Start/Stop/Resume controls. The waves represent
-  enabled monitoring, not a promise of continuous or successful radio scans.
+- A large, sculpted Wi-Fi button with three gently expanding waves. Tap the central
+  disc to enable monitoring, then tap again to stop. The disc depresses on touch
+  and stays inset while monitoring is enabled; an on/off accessibility state and
+  a short tap hint make the action clear. There are no separate Start/Stop/Resume
+  buttons. Missing profiles or permissions lead to their setup flow.
+- Explicit monitoring status. When Android requires a fresh start, the Wi-Fi
+  button shows off and starts monitoring on its next tap. The waves represent
+  monitoring intent, not a promise of continuous or successful radio scans.
 - A profile picker directly on Home. Selection closes the picker and updates the
   saved active profile; the service applies volumes after a fresh scan.
 - In-range and out-of-range ringtone/notification summaries, with an edit action.
@@ -30,6 +35,11 @@ The app intentionally stays light, including when Android uses dark mode. Soft
 white surfaces, opposing diffuse shadows, charcoal controls, and restrained sage
 status accents replace the blue theme. All shadows use ordinary drawing primitives
 supported from Android 8, without software rendering or bitmap assets.
+
+Both tabs keep the same white surface and charcoal icons/text. The selected tab
+has a soft inner shadow at the top/left and a white highlight at the bottom/right,
+giving it pressed-in depth without a dark fill. Selection depth animates, and
+both tabs give gentle scale feedback on touch while retaining selected-tab semantics.
 
 Tab changes crossfade, profile summaries resize smoothly, and the Home profile
 control responds to a press. Wi-Fi waves run only while monitoring is enabled,
@@ -95,12 +105,13 @@ Run with JDK 21:
 bash gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
-The debug APK builds, lint reports zero errors, and all 35 tests pass, including 16 UI tests. The test suite includes notification routing, repeat suppression, permissions,
+The test suite includes notification routing, repeat suppression, permissions,
 confirmed service changes, DND deferral, popup dismissal, and replacement timing.
 The UI tests cover a 390 dp phone, a 1040 dp tablet with system dark mode, and a
 320 dp window at 160% text size. They exercise profile selection from Home,
 creation/editing, validation, restored drafts, discard/delete confirmation, both
-tabs, setup access, and Stop with missing permissions. A frame comparison verifies
+tabs, setup access, Wi-Fi-button start/stop and recovery, and stopping with missing
+permissions. A frame comparison verifies
 that Wi-Fi waves move while enabled and settle when paused.
 
 GitHub's SDK setup explicitly requests `platform-tools`: the action's old default

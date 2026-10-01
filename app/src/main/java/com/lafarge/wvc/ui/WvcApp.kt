@@ -2,10 +2,12 @@ package com.lafarge.wvc.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
@@ -25,6 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -168,10 +171,15 @@ private fun BottomTabs(selected: Int, onSelect: (Int) -> Unit) {
         Row(Modifier.widthIn(max = 440.dp).fillMaxWidth().softSurface(24.dp).selectableGroup().padding(7.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("Home", "Profile").forEachIndexed { index, label ->
                 val active = selected == index
-                val background by animateColorAsState(if (active) MaterialTheme.colorScheme.primary else Color.Transparent, tween(220), label = "tab background")
-                val foreground by animateColorAsState(if (active) Color.White else MaterialTheme.colorScheme.onSurfaceVariant, tween(220), label = "tab foreground")
-                Row(Modifier.weight(1f).clip(RoundedCornerShape(18.dp)).background(background)
-                    .selectable(active, role = Role.Tab, onClick = { onSelect(index) }).heightIn(min = 52.dp).padding(horizontal = 8.dp, vertical = 12.dp),
+                val interaction = remember { MutableInteractionSource() }
+                val pressed by interaction.collectIsPressedAsState()
+                val depth by animateFloatAsState(if (active || pressed) 1f else 0f, tween(200), label = "tab inset depth")
+                val scale by animateFloatAsState(if (pressed) .98f else 1f, tween(140), label = "tab press")
+                val foreground = MaterialTheme.colorScheme.onSurface
+                Row(Modifier.weight(1f).graphicsLayer { scaleX = scale; scaleY = scale }
+                    .clip(RoundedCornerShape(18.dp)).softInset(18.dp, depth).testTag("tab-$label")
+                    .selectable(active, interactionSource = interaction, indication = null, role = Role.Tab, onClick = { onSelect(index) })
+                    .heightIn(min = 52.dp).padding(horizontal = 8.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                     if (index == 0) Icon(Icons.Default.Home, null, Modifier.size(22.dp), tint = foreground)
                     else ProfileGlyph(Modifier.size(22.dp), foreground)
@@ -209,19 +217,16 @@ private fun HomeLayout(monitor: @Composable () -> Unit, controls: @Composable ()
 @Composable
 private fun MonitoringPanel(state: WvcState, visible: Boolean, onStart: () -> Unit, onStop: () -> Unit, onSetupAction: (String) -> Unit) {
     Column(Modifier.fillMaxWidth().testTag("monitoring-panel"), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        WifiScanner(state.enabled, visible, Modifier.widthIn(max = 266.dp))
+        WifiScanner(state.monitoringOn, visible, Modifier.widthIn(max = 266.dp),
+            onToggle = if (state.monitoringOn) onStop else onStart)
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Box(Modifier.size(7.dp).background(if (state.enabled) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outline, CircleShape))
-                Text(if (state.enabled) "Monitoring enabled" else "Monitoring paused", style = MaterialTheme.typography.titleMedium)
+                Box(Modifier.size(7.dp).background(if (state.monitoringOn) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outline, CircleShape))
+                Text(if (state.monitoringOn) "Monitoring enabled" else "Monitoring paused", style = MaterialTheme.typography.titleMedium)
             }
-            Text(if (state.enabled) state.status else "Ready whenever you are.", textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Button(onClick = if (state.enabled) onStop else onStart,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp), shape = RoundedCornerShape(18.dp)) {
-            Icon(if (state.enabled) Icons.Default.Close else Icons.Default.PlayArrow, null, Modifier.size(20.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(when { state.enabled -> "Stop monitoring"; state.activeProfile == null -> "Choose a profile"; state.requiredMissing > 0 -> "Finish setup"; else -> "Start monitoring" })
+            Text(if (state.monitoringOn) "Tap to stop scanning" else "Tap to start scanning",
+                style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(if (state.enabled || state.recoveryAction != null) state.status else "Ready whenever you are.", textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         state.recoveryAction?.let { action ->
             if (action == "dnd" || action == "location") {
@@ -229,9 +234,6 @@ private fun MonitoringPanel(state: WvcState, visible: Boolean, onStart: () -> Un
                     Text(if (action == "dnd") "Allow sound control" else "Review location access")
                 }
             }
-        }
-        if (state.enabled) TextButton(onClick = onStart, contentPadding = PaddingValues(horizontal = 12.dp)) {
-            Icon(Icons.Default.Refresh, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Resume monitoring")
         }
     }
 }
@@ -365,7 +367,7 @@ private fun SetupDialog(state: WvcState, onDismiss: () -> Unit, onAction: (Strin
             }
         }
         Text("After a restart", style = MaterialTheme.typography.titleMedium)
-        Text(if (state.needsRebootResume) "On Android 17, open WVC and tap Resume after a reboot or app update. Android requires this before background sound changes can resume." else "Monitoring restarts after reboot if you left it enabled and granted the required access. After force-stopping WVC, open it again to resume.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(if (state.needsRebootResume) "On Android 17, open WVC and tap the Wi-Fi button after a reboot or app update. Android requires this before background sound changes can resume." else "Monitoring restarts after reboot if you left it enabled and granted the required access. After force-stopping WVC, open it and switch monitoring off and on using the Wi-Fi button.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text("If monitoring is delayed", style = MaterialTheme.typography.titleMedium)
         Text("Sleeping phones and battery restrictions can delay Wi-Fi scans. Check WVC’s battery settings if monitoring stops overnight.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         TextButton(onClick = { onAction("battery") }) { Text("Open app settings") }

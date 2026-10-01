@@ -164,7 +164,7 @@ class MainActivity : ComponentActivity() {
             MonitoringSettings.status(this, "Startup denied; check precise location permission")
         } catch (e: IllegalStateException) {
             prefs.edit().putBoolean(MonitoringSettings.ENABLED, false).apply()
-            MonitoringSettings.status(this, "Android blocked startup; tap Resume while WVC is open")
+            MonitoringSettings.status(this, "Android blocked startup; open WVC and tap the Wi-Fi button", "resume")
         }
     }
 

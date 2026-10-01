@@ -20,9 +20,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
@@ -51,6 +54,37 @@ internal fun Modifier.softSurface(radius: Dp = 26.dp): Modifier = this
     .clip(RoundedCornerShape(radius))
     .background(Brush.linearGradient(listOf(Color(0xFFFCFDFE), Color(0xFFF1F3F5))))
     .border(1.dp, Color.White.copy(alpha = .9f), RoundedCornerShape(radius))
+
+/** White surface with shadows inside its edge; depth animates without changing the fill. */
+internal fun Modifier.softInset(radius: Dp = 18.dp, depth: Float = 1f): Modifier = this
+    .drawWithCache {
+        val corner = radius.toPx().coerceAtMost(size.minDimension / 2)
+        val surface = Path().apply {
+            addRoundRect(RoundRect(0f, 0f, size.width, size.height, CornerRadius(corner)))
+        }
+        val offset = 3.dp.toPx()
+        val spread = 7.dp.toPx()
+        fun insetShadow(inset: Float, shift: Float): Path {
+            val hole = Path().apply {
+                addRoundRect(RoundRect(inset + shift, inset + shift,
+                    size.width - inset + shift, size.height - inset + shift,
+                    CornerRadius((corner - inset).coerceAtLeast(0f))))
+            }
+            return Path.combine(PathOperation.Difference, surface, hole)
+        }
+        val shadows = (1..12).map { layer ->
+            val inset = spread * layer / 12f
+            insetShadow(inset, offset) to insetShadow(inset, -offset)
+        }
+        onDrawBehind {
+            drawPath(surface, Color(0xFFFAFBFC))
+            val amount = depth.coerceIn(0f, 1f)
+            shadows.forEach { (shade, light) ->
+                drawPath(shade, Color(0xFF8C969F).copy(alpha = .035f * amount))
+                drawPath(light, Color.White.copy(alpha = .12f * amount))
+            }
+        }
+    }
 
 @Composable
 internal fun SoftCard(modifier: Modifier = Modifier, animateSize: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
