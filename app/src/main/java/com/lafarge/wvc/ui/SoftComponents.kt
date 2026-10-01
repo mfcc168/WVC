@@ -49,7 +49,7 @@ internal fun Modifier.softSurface(radius: Dp = 26.dp, color: Color? = null): Mod
                 val shadowSize = Size(size.width + blur * 2, size.height + blur * 2)
                 val corners = CornerRadius(corner + blur)
                 drawRoundRect(
-                    Color(0xFF7D858D).copy(alpha = .022f * fade * fade),
+                    Color(0xFF858585).copy(alpha = .022f * fade * fade),
                     Offset(-blur, offset - blur), shadowSize, corners
                 )
             }
