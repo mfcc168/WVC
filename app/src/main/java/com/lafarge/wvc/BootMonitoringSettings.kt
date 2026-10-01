@@ -7,11 +7,10 @@ import com.google.gson.Gson
 
 /** Only the selected profile and enable intent are available before the first unlock. */
 object BootMonitoringSettings {
-    fun storageContext(context: Context): Context = when {
-        !context.getSystemService(UserManager::class.java).isUserUnlocked -> context.createDeviceProtectedStorageContext()
-        context.isDeviceProtectedStorage -> context.createCredentialProtectedStorageContext()
-        else -> context
-    }
+    // Call with the component's normal context; the application keeps credential storage as its default.
+    fun storageContext(context: Context): Context =
+        if (context.getSystemService(UserManager::class.java).isUserUnlocked) context
+        else context.createDeviceProtectedStorageContext()
 
     fun sync(context: Context) {
         // Never open credential-protected preferences from a locked-boot component.
