@@ -227,7 +227,9 @@ private fun MonitoringPanel(state: WvcState, visible: Boolean, onStart: () -> Un
             }
             Text(if (state.monitoringOn) "Tap to stop scanning" else "Tap to start scanning",
                 style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(if (state.enabled || state.recoveryAction != null) state.status else "Ready whenever you are.", textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (state.enabled || state.recoveryAction != null) {
+                Text(state.status, textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         state.recoveryAction?.let { action ->
             if (action == "dnd" || action == "location") {
