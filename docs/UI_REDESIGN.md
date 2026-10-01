@@ -108,9 +108,10 @@ Run the project checks:
 bash gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
-The Wi-Fi toggle and inset tabs passed all 47 tests, debug/release APK builds, and
-lint with no errors on GitHub. The native previews above were checked at phone,
-tablet, and enlarged-text sizes.
+The shared shadow update, Wi-Fi toggle, and inset tabs passed all 47 tests,
+debug/release APK builds, and lint with no errors on GitHub. The native previews
+above were refreshed for the single-shadow surfaces and checked at phone, tablet,
+and enlarged-text sizes.
 
 The test suite includes notification routing, repeat suppression, permissions,
 confirmed service changes, DND deferral, popup dismissal, and replacement timing.
