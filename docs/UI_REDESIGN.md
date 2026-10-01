@@ -32,9 +32,11 @@ monitoring. Legacy profiles and saved settings are retained.
 ## Visual and motion design
 
 The app intentionally stays light, including when Android uses dark mode. Soft
-white surfaces, opposing diffuse shadows, charcoal controls, and restrained sage
-status accents replace the blue theme. All shadows use ordinary drawing primitives
-supported from Android 8, without software rendering or bitmap assets.
+white surfaces, charcoal controls, and restrained sage status accents replace the
+blue theme. Raised surfaces use a single subtle shadow that fades outward, without
+a second white halo or bright outline that could resemble a duplicate card. All
+shadows use ordinary drawing primitives supported from Android 8, without software
+rendering or bitmap assets.
 
 The navigation bar and both tab buttons share the same light grey base (#F5F6F7),
 with charcoal icons/text. The selected tab

@@ -5,7 +5,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -34,27 +33,31 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-/** Soft opposing shadows, drawn with regular GPU primitives on every supported API. */
+/** One diffuse raised edge, drawn with regular GPU primitives on every supported API. */
 internal fun Modifier.softSurface(radius: Dp = 26.dp, color: Color? = null): Modifier = this
     .drawWithCache {
-        val corner = radius.toPx()
-        val offset = 4.dp.toPx()
-        val spread = 8.dp.toPx()
+        val corner = radius.toPx().coerceAtMost(size.minDimension / 2)
+        val offset = 2.dp.toPx()
+        val spread = 6.dp.toPx()
         onDrawBehind {
-            // Layered translucent outlines approximate a diffuse shadow without a software layer.
-            for (layer in 12 downTo 1) {
-                val blur = spread * layer / 12f
+            // Fade one shadow outward. A second white silhouette and a bright border
+            // make large cards look like another card is sitting behind them.
+            for (layer in 16 downTo 1) {
+                val distance = layer / 16f
+                val blur = spread * distance
+                val fade = 1f - distance
                 val shadowSize = Size(size.width + blur * 2, size.height + blur * 2)
                 val corners = CornerRadius(corner + blur)
-                drawRoundRect(Color(0xFFADB5BD).copy(alpha = .018f), Offset(offset - blur, offset - blur), shadowSize, corners)
-                drawRoundRect(Color.White.copy(alpha = .075f), Offset(-offset - blur, -offset - blur), shadowSize, corners)
+                drawRoundRect(
+                    Color(0xFF7D858D).copy(alpha = .022f * fade * fade),
+                    Offset(-blur, offset - blur), shadowSize, corners
+                )
             }
         }
     }
     .clip(RoundedCornerShape(radius))
     .then(if (color == null) Modifier.background(Brush.linearGradient(listOf(Color(0xFFFCFDFE), Color(0xFFF1F3F5))))
         else Modifier.background(color))
-    .border(1.dp, Color.White.copy(alpha = .9f), RoundedCornerShape(radius))
 
 /** Surface with shadows inside its edge; depth animates without changing the fill. */
 internal fun Modifier.softInset(radius: Dp = 18.dp, depth: Float = 1f, color: Color = Color(0xFFFAFBFC)): Modifier = this
