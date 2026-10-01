@@ -7,11 +7,15 @@ import androidx.core.content.ContextCompat
 
 class BootCompleteReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
-        if (intent?.action != Intent.ACTION_BOOT_COMPLETED && intent?.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
-        if (!MonitoringSettings.prefs(context).getBoolean(MonitoringSettings.ENABLED, false)) return
+        if (intent?.action !in setOf(Intent.ACTION_LOCKED_BOOT_COMPLETED, Intent.ACTION_BOOT_COMPLETED,
+                Intent.ACTION_MY_PACKAGE_REPLACED)) return
+        val storage = BootMonitoringSettings.storageContext(context)
+        BootMonitoringSettings.sync(storage)
+        if (!MonitoringSettings.prefs(storage).getBoolean(MonitoringSettings.ENABLED, false)) return
+        android.util.Log.i("WvcMonitoring", "Boot event ${intent?.action} at ${android.os.SystemClock.elapsedRealtime()} ms")
         if (android.os.Build.VERSION.SDK_INT >= 37) {
             val message = "Open WVC and tap the Wi-Fi button to enable monitoring after reboot or update"
-            MonitoringSettings.status(context, message, "resume")
+            MonitoringSettings.status(storage, message, "resume")
             val manager = context.getSystemService(android.app.NotificationManager::class.java)
             manager.createNotificationChannel(android.app.NotificationChannel(
                 WiFiScanService.CHANNEL, "Wi-Fi monitoring", android.app.NotificationManager.IMPORTANCE_LOW))
@@ -25,17 +29,17 @@ class BootCompleteReceiver : BroadcastReceiver() {
             }
             return
         }
-        if (!MonitoringSettings.hasLocation(context) || !MonitoringSettings.hasBackgroundLocation(context) ||
-            !MonitoringSettings.locationEnabled(context)) {
-            MonitoringSettings.status(context, "Open WVC: precise and always-allowed location are needed after reboot", "resume")
+        if (!MonitoringSettings.hasLocation(context) || !MonitoringSettings.hasBackgroundLocation(context)) {
+            MonitoringSettings.status(storage, "Open WVC: precise and always-allowed location are needed after reboot", "resume")
             return
         }
         try {
-            ContextCompat.startForegroundService(context, Intent(context, WiFiScanService::class.java))
+            // Location/Wi-Fi switches may still be initializing; the service waits for their system broadcasts.
+            ContextCompat.startForegroundService(storage, Intent(context, WiFiScanService::class.java))
         } catch (e: SecurityException) {
-            MonitoringSettings.status(context, "Open WVC and tap the Wi-Fi button: permission unavailable at startup", "resume")
+            MonitoringSettings.status(storage, "Open WVC and tap the Wi-Fi button: permission unavailable at startup", "resume")
         } catch (e: IllegalStateException) {
-            MonitoringSettings.status(context, "Android blocked automatic startup; open WVC and tap the Wi-Fi button", "resume")
+            MonitoringSettings.status(storage, "Android blocked automatic startup; open WVC and tap the Wi-Fi button", "resume")
         }
     }
 }

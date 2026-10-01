@@ -23,6 +23,9 @@ Notification policy access needed for some silent-volume transitions was missing
 - Request scans no more often than every two minutes and consume system scan
   broadcasts. Android can throttle further; this is not a timing guarantee.
 - Require successful scan broadcasts and observations at most 30 seconds old.
+  At service startup, a cached positive sighting of the selected SSID that meets
+  the same freshness check can establish presence immediately. Cached misses
+  cannot establish departure or advance the miss count.
   Duplicate/out-of-order snapshots do not advance the presence state machine.
   One fresh sighting enters the area; two consecutive fresh misses leave it.
   Empty, failed and stale results retain the last confirmed area. In a place with
@@ -42,6 +45,21 @@ Notification policy access needed for some silent-volume transitions was missing
 - Persist user enable/disable intent independently of service lifetime. Do not
   stop monitoring when the activity closes. Use START_STICKY, with no exact alarm
   or attempt to bypass force-stop or Android's background restrictions.
+- On API 26–36, receive `LOCKED_BOOT_COMPLETED` as well as normal boot/update
+  events. The boot receiver and service are Direct Boot aware. Keep only the
+  enable intent, selected profile, and its legacy level snapshot in
+  device-protected storage; the full profile list stays credential-protected.
+  Synchronize the small snapshot on profile edits/selection, start/stop, and
+  opening WVC after an upgrade. Before first unlock, use the snapshot without
+  reading credential-protected preferences. After unlock, switch the running
+  service to the complete settings without copying the snapshot over them.
+  A disabled full configuration stops a previously boot-started service.
+  Wi-Fi and Location switches may still initialize after early boot: start the
+  notification with the required permissions, pause scanning until ready, and
+  react to their broadcasts. Duplicate early/normal starts retain one set of
+  service timers and receivers. Android controls boot delivery, radio readiness,
+  and scan availability; this reduces avoidable waits without promising an
+  instant start or a fixed reboot-to-volume latency.
 - Keep named profiles and legacy settings, including saving legacy sliders.
 - Show service status and explicit permission/settings controls. Request coarse
   and precise location together, notifications only on API 33+, and background
@@ -87,6 +105,8 @@ library was removed; it was not a Crashlytics SDK integration.
 | 17 / API 37 | Same permissions, plus explicit Resume after boot/update for background audio capabilities |
 
 After upgrading from 1.0, tap the Wi-Fi button once to enable monitoring.
+After installing the early-boot update, open WVC once to prepare its active-profile
+snapshot, then test a reboot while leaving the phone locked before first unlock.
 Grant notification policy access if using silent volume settings. WVC does not
 promise to disable a user's DND mode on exit. Manufacturer battery restrictions,
 force-stop, revoked permissions, and Doze can stop or delay work. After force-stop,
@@ -119,6 +139,10 @@ for Wi-Fi failures. For sound failures with access already granted, tap the Wi-F
 button from the open app; phone-specific restrictions or Android's background audio rules
 can also prevent changes.
 
+For delayed reboot startup, `WvcMonitoring` logcat entries record the boot event,
+service readiness, and first confirmed sound profile using milliseconds since
+boot. This distinguishes Android's event-delivery wait from scan/audio startup.
+
 Reference: https://developer.android.com/reference/android/media/AudioManager#setStreamVolume(int,int,int)
 
 ### Build and device checks
@@ -149,8 +173,11 @@ Before release, test on physical devices at API 26/29/31/33/34/35/36/37:
    Wi-Fi scans throttled. Stop monitoring and confirm manual levels remain.
    Edit levels for the confirmed network; confirm the next volume check uses
    them. Select a different SSID; confirm it waits for its own fresh observation.
-5. Stop then reboot: no restart. Enable then reboot: API 26–36 resumes if permitted;
-   API 37 shows Resume. Test denied background location and notifications.
+5. Stop then reboot: no restart. Enable then reboot: API 26–36 resumes if permitted,
+   including before first unlock; API 37 shows Resume. Test denied background
+   location and notifications. Record notification and first sound-change times.
+   Leave Wi-Fi/Location off during boot, then turn them on; monitoring should
+   continue without reopening WVC. Unlock and check that all saved profiles remain.
 6. Test zero volume, linked ringtone/notification streams, DND on/off, revoked
    notification policy access, and manually adjusted volume between transitions.
 7. Force-stop and reopen; test an OS-restarted service. On API 37 use
@@ -159,6 +186,7 @@ Before release, test on physical devices at API 26/29/31/33/34/35/36/37:
 
 ## Official references
 
+- https://developer.android.com/privacy-and-security/direct-boot
 - https://developer.android.com/develop/connectivity/wifi/wifi-scan
 - https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start
 - https://developer.android.com/develop/background-work/services/fgs/service-types

@@ -6,7 +6,7 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 
 /** Profile edits and selection are committed together; the service never sees a half-edited profile. */
-class ProfileStorageManager(context: Context) {
+class ProfileStorageManager(private val context: Context) {
     private val prefs = MonitoringSettings.prefs(context)
     private val gson = Gson()
     private val typeToken = object : TypeToken<List<VolumeProfile>>() {}.type
@@ -60,5 +60,6 @@ class ProfileStorageManager(context: Context) {
         editor.putString("HOME_SSID", active?.ssid.orEmpty())
         active?.volumes?.forEach { (key, volume) -> editor.putInt("${key}_VOLUME", volume) }
         editor.apply()
+        BootMonitoringSettings.sync(context)
     }
 }

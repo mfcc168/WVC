@@ -15,6 +15,7 @@ import androidx.core.content.ContextCompat
 class WiFiScanService : Service() {
     private lateinit var wifi: WifiManager
     private lateinit var audio: AudioManager
+    private lateinit var storageContext: Context
     private lateinit var prefs: SharedPreferences
     private val handler = Handler(Looper.getMainLooper())
     private var registered = false
@@ -30,6 +31,12 @@ class WiFiScanService : Service() {
             handler.postDelayed(this, SCAN_INTERVAL_MS)
         }
     }
+    private val startupTask = Runnable {
+        scanTask.run()
+        // Android may have already scanned during boot. Only a recent positive
+        // match can establish the area without a new successful scan broadcast.
+        consumeResults(requireSsidMatch = true)
+    }
     private val volumeTask = object : Runnable {
         override fun run() {
             if (!prefs.getBoolean(MonitoringSettings.ENABLED, false)) return
@@ -42,6 +49,16 @@ class WiFiScanService : Service() {
             if (intent.action == WifiManager.SCAN_RESULTS_AVAILABLE_ACTION) {
                 if (intent.getBooleanExtra(WifiManager.EXTRA_RESULTS_UPDATED, false)) consumeResults()
                 else scanStatus("Scan unavailable; keeping current volume")
+            } else if (intent.action == Intent.ACTION_USER_UNLOCKED) {
+                useAvailableStorage()
+                if (!prefs.getBoolean(MonitoringSettings.ENABLED, false)) {
+                    handler.removeCallbacksAndMessages(null)
+                    stopSelf()
+                    return
+                }
+                handler.removeCallbacks(startupTask)
+                handler.removeCallbacks(scanTask)
+                handler.post(startupTask)
             } else {
                 // Turning Wi-Fi/location off is not proof that the user left the area.
                 requestScan()
@@ -51,7 +68,8 @@ class WiFiScanService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        prefs = MonitoringSettings.prefs(this)
+        storageContext = BootMonitoringSettings.storageContext(this)
+        prefs = MonitoringSettings.prefs(storageContext)
         wifi = applicationContext.getSystemService(WifiManager::class.java)
         audio = getSystemService(AudioManager::class.java)
         getSystemService(NotificationManager::class.java).createNotificationChannel(
@@ -60,19 +78,22 @@ class WiFiScanService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        useAvailableStorage()
         if (!prefs.getBoolean(MonitoringSettings.ENABLED, false)) {
+            handler.removeCallbacksAndMessages(null)
             stopSelf()
             return START_NOT_STICKY
         }
         try {
             ServiceCompat.startForeground(this, 1, notification("Waiting for a fresh Wi-Fi scan"),
                 if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION else 0)
+            if (applied == null) status("Waiting for a fresh Wi-Fi scan")
         } catch (e: SecurityException) {
-            MonitoringSettings.status(this, "Location permission required; open WVC and tap the Wi-Fi button", "resume")
+            MonitoringSettings.status(storageContext, "Location permission required; open WVC and tap the Wi-Fi button", "resume")
             stopSelf()
             return START_NOT_STICKY
         } catch (e: IllegalStateException) {
-            MonitoringSettings.status(this, "Android blocked startup; open WVC and tap the Wi-Fi button", "resume")
+            MonitoringSettings.status(storageContext, "Android blocked startup; open WVC and tap the Wi-Fi button", "resume")
             stopSelf()
             return START_NOT_STICKY
         }
@@ -82,14 +103,32 @@ class WiFiScanService : Service() {
                 addAction(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION)
                 addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
                 addAction(android.location.LocationManager.MODE_CHANGED_ACTION)
+                addAction(Intent.ACTION_USER_UNLOCKED)
             }, ContextCompat.RECEIVER_EXPORTED)
             registered = true
         }
+        Log.i(TAG, "Monitoring service ready at ${SystemClock.elapsedRealtime()} ms; locked=${storageContext.isDeviceProtectedStorage}")
+        handler.removeCallbacks(startupTask)
         handler.removeCallbacks(scanTask)
-        handler.post(scanTask)
+        handler.post(startupTask)
         handler.removeCallbacks(volumeTask)
         handler.post(volumeTask)
         return START_STICKY
+    }
+
+    private fun useAvailableStorage() {
+        val available = BootMonitoringSettings.storageContext(this)
+        if (available.isDeviceProtectedStorage == storageContext.isDeviceProtectedStorage) return
+        val previous = prefs
+        storageContext = available
+        prefs = MonitoringSettings.prefs(storageContext)
+        // The complete credential-protected profile list remains authoritative after unlock.
+        // Carry runtime status across, never the boot snapshot's configuration or enable flag.
+        if (prefs.getBoolean(MonitoringSettings.ENABLED, false)) {
+            previous.getString(MonitoringSettings.STATUS, null)?.let {
+                status(it, previous.getString(MonitoringSettings.RECOVERY_ACTION, null))
+            }
+        }
     }
 
     private fun requestScan() {
@@ -113,8 +152,10 @@ class WiFiScanService : Service() {
         }
     }
 
+    private fun consumeResults() = consumeResults(requireSsidMatch = false)
+
     @Suppress("DEPRECATION")
-    private fun consumeResults() {
+    private fun consumeResults(requireSsidMatch: Boolean) {
         if (!prefs.getBoolean(MonitoringSettings.ENABLED, false)) return
         if (!MonitoringSettings.hasLocation(this) || !MonitoringSettings.locationEnabled(this)) return
         // Keep Wi-Fi permission failures separate from failures to change sound settings.
@@ -127,7 +168,7 @@ class WiFiScanService : Service() {
             return
         }
         try {
-            val profile = ProfileStorageManager(this).getActiveProfile()
+            val profile = ProfileStorageManager(storageContext).getActiveProfile()
             val ssid = profile?.ssid ?: prefs.getString("HOME_SSID", "").orEmpty()
             if (ssid.isBlank()) {
                 status("Paused: select a profile with a Wi-Fi name")
@@ -145,7 +186,9 @@ class WiFiScanService : Service() {
                 scanStatus("No fresh Wi-Fi observations; keeping current volume")
                 return
             }
-            val indoor = tracker.observe(results.any { it.SSID == ssid }, results.maxOf { it.timestamp })
+            val found = results.any { it.SSID == ssid }
+            if (requireSsidMatch && !found) return
+            val indoor = tracker.observe(found, results.maxOf { it.timestamp })
             if (indoor == null) {
                 scanStatus("Confirming Wi-Fi area; keeping current volume")
                 return
@@ -175,7 +218,7 @@ class WiFiScanService : Service() {
             applied = null
             return
         }
-        val profile = ProfileStorageManager(this).getActiveProfile()
+        val profile = ProfileStorageManager(storageContext).getActiveProfile()
         val ssid = profile?.ssid ?: prefs.getString("HOME_SSID", "").orEmpty()
         if (ssid != confirmed.ssid) {
             // Selecting a different network must never reuse the old network's range state.
@@ -226,8 +269,9 @@ class WiFiScanService : Service() {
                     status("Phone links sound volumes; use matching ringtone and notification levels")
                     return
                 }
+                if (applied == null) Log.i(TAG, "First confirmed sound profile at ${SystemClock.elapsedRealtime()} ms")
                 applied = signature
-                ProfileChangeNotifier.applied(this, signature,
+                ProfileChangeNotifier.applied(storageContext, signature,
                     beforeRing != audio.getStreamVolume(AudioManager.STREAM_RING) ||
                         beforeAlerts != audio.getStreamVolume(AudioManager.STREAM_NOTIFICATION))
                 status(if (signature.indoor) "Inside Wi-Fi area: ${signature.ssid}" else "Outside Wi-Fi area: ${signature.ssid}")
@@ -282,7 +326,7 @@ class WiFiScanService : Service() {
         if (message == lastStatus && prefs.getString(MonitoringSettings.STATUS, null) == message &&
             prefs.getString(MonitoringSettings.RECOVERY_ACTION, null) == recoveryAction) return
         lastStatus = message
-        MonitoringSettings.status(this, message, recoveryAction)
+        MonitoringSettings.status(storageContext, message, recoveryAction)
         if (Build.VERSION.SDK_INT < 33 || checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
             android.content.pm.PackageManager.PERMISSION_GRANTED) {
             try {

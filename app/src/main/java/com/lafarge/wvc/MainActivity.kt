@@ -50,6 +50,7 @@ class MainActivity : ComponentActivity() {
         prefs = MonitoringSettings.prefs(this)
         profiles = ProfileStorageManager(this)
         profiles.migrateLegacyProfile()
+        BootMonitoringSettings.sync(this)
         ProfileChangeNotifier.createChannel(this)
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -157,23 +158,23 @@ class MainActivity : ComponentActivity() {
             setupAction("dnd")
             return
         }
-        prefs.edit().putBoolean(MonitoringSettings.ENABLED, true).apply()
+        MonitoringSettings.setEnabled(this, true)
         try {
             stopService(Intent(this, WiFiScanService::class.java))
             getSystemService(NotificationManager::class.java).cancel(2)
             ContextCompat.startForegroundService(this, Intent(this, WiFiScanService::class.java))
             MonitoringSettings.status(this, "Starting; waiting for a fresh Wi-Fi scan")
         } catch (e: SecurityException) {
-            prefs.edit().putBoolean(MonitoringSettings.ENABLED, false).apply()
+            MonitoringSettings.setEnabled(this, false)
             MonitoringSettings.status(this, "Startup denied; check precise location permission")
         } catch (e: IllegalStateException) {
-            prefs.edit().putBoolean(MonitoringSettings.ENABLED, false).apply()
+            MonitoringSettings.setEnabled(this, false)
             MonitoringSettings.status(this, "Android blocked startup; open WVC and tap the Wi-Fi button", "resume")
         }
     }
 
     private fun stopMonitoring() {
-        prefs.edit().putBoolean(MonitoringSettings.ENABLED, false).apply()
+        MonitoringSettings.setEnabled(this, false)
         stopService(Intent(this, WiFiScanService::class.java))
         getSystemService(NotificationManager::class.java).cancel(2)
         MonitoringSettings.status(this, "Monitoring stopped. Your current volume is unchanged.")

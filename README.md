@@ -11,6 +11,13 @@ check. Choosing a different Wi-Fi network waits for its own fresh scan. Tap the
 Wi-Fi button to stop monitoring when you want to keep manual volume changes.
 Checks can be delayed while Android sleeps or suspends the service.
 
+On Android 8–16, enabled monitoring can start from the earlier pre-unlock boot
+event, using a small saved copy of the active profile. Open WVC once after
+installing this update to prepare that copy. Startup can apply a recent matching
+Wi-Fi observation immediately; stale scans and cached misses do not establish an
+area. Android still controls boot delivery and Wi-Fi readiness, so startup time
+is not guaranteed. Android 17 requires tapping the Wi-Fi button after reboot.
+
 ## Open and run in Android Studio
 
 This branch targets Android 17. **Use Android Studio Quail 2 (2026.1.2) or a
