@@ -1,0 +1,100 @@
+# WVC
+
+WVC changes ringtone and notification volume when a selected Wi-Fi network is
+nearby. It includes named sound profiles, background monitoring, and a light
+Compose interface.
+
+While monitoring is on, WVC checks the phone's ringtone and notification levels
+every five seconds and restores the selected profile's levels for the last
+confirmed Wi-Fi area. Editing that profile's levels also takes effect on the next
+check. Choosing a different Wi-Fi network waits for its own fresh scan. Tap the
+Wi-Fi button to stop monitoring when you want to keep manual volume changes.
+Checks can be delayed while Android sleeps or suspends the service.
+
+On Android 8–16, enabled monitoring can start from the earlier pre-unlock boot
+event, using a small saved copy of the active profile. Open WVC once after
+installing this update to prepare that copy. Startup can apply a recent matching
+Wi-Fi observation immediately; stale scans and cached misses do not establish an
+area. Android still controls boot delivery and Wi-Fi readiness, so startup time
+is not guaranteed. Android 17 requires tapping the Wi-Fi button after reboot.
+
+## Open and run in Android Studio
+
+This branch targets Android 17. **Use Android Studio Quail 2 (2026.1.2) or a
+newer version that supports AGP 9.3.** Quail 4 (2026.1.4) is the current stable
+release as of October 2026.
+
+| Component | Project version |
+|---|---|
+| Android Gradle plugin (AGP) | 9.3.0 |
+| Gradle | 9.5.0, downloaded by the checked-in wrapper |
+| Gradle JDK | 21, matching CI |
+| Android SDK platform | Android 17 / API 37 (`platforms;android-37.0`) |
+| SDK Build Tools | 36.0.0 |
+| Minimum device version | Android 8 / API 26 |
+
+1. Update Android Studio using **Help → Check for Updates** (on macOS,
+   **Android Studio → Check for Updates**). If the updater does not offer a
+   compatible release, [download the current stable installer](https://developer.android.com/studio).
+2. Open the repository root containing `settings.gradle.kts`, on branch
+   `fix/android-modern-background-monitoring`.
+3. In **Settings → Build, Execution, Deployment → Build Tools → Gradle**, select
+   **JDK 21** as the Gradle JDK. The bundled `jbr-21` is suitable; otherwise use
+   the dropdown's **Download JDK** option. Use the project's Gradle wrapper.
+4. In **Tools → SDK Manager**, install **Android 17 (API 37)**, **Android SDK
+   Build-Tools 36.0.0** (enable **Show Package Details**), and **Android SDK
+   Platform-Tools**. Accept the requested SDK licenses.
+5. Select **File → Sync Project with Gradle Files**, choose the **app** run
+   configuration and a device/emulator, then click **Run**.
+
+Use a physical Android device to test nearby Wi-Fi scans, entering/leaving range,
+and background behavior. An emulator is useful for checking the interface.
+
+### “Latest supported version is AGP 8.8.0”
+
+That message is the installed Android Studio's compatibility limit, not the
+latest available AGP release. Update the IDE using the steps above. The
+[official compatibility table](https://developer.android.com/studio/releases#android_gradle_plugin_and_android_studio_compatibility)
+lists Quail 2 as supporting AGP 9.3.
+
+AGP 8.8 officially supports only API 35. Changing just `agp` to `8.8.0` would also
+conflict with this branch's Gradle version and built-in Kotlin configuration.
+Keep the checked-in build versions together to retain the API 37 target.
+
+## Build from a terminal
+
+Set `JAVA_HOME` to JDK 21 and install the SDK packages above. Android Studio
+normally creates `local.properties` with your local `sdk.dir`; command-line-only
+setups can use `ANDROID_HOME` instead. Do not commit machine-specific paths.
+
+Windows PowerShell:
+
+```powershell
+.\gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+```
+
+macOS / Linux:
+
+```sh
+bash gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+```
+
+The APK is written to `app/build/outputs/apk/debug/app-debug.apk`.
+GitHub Actions also uploads it with reports in the `android-check-results`
+artifact of each successful **Android checks** run.
+
+## Automatic APK releases
+
+The **APK release** workflow builds, tests, and signs an APK, then attaches it
+and a SHA-256 checksum to a GitHub Release when you push a matching version tag
+(currently `v1.1`). Manual runs produce downloadable signed builds without
+publishing. Configure the four signing secrets once and follow the
+[APK release guide](docs/APK_RELEASES.md). The manual button becomes available
+after the workflow is merged into the default branch.
+
+## Project notes
+
+- [Android behavior, permissions, and device testing](docs/ANDROID_COMPATIBILITY.md)
+- [Interface and native preview screenshots](docs/UI_REDESIGN.md)
+- [AGP 9.3 build requirements](https://developer.android.com/build/releases/agp-9-3-0-release-notes)
+- [AGP 8.8 build requirements](https://developer.android.com/build/releases/agp-8-8-0-release-notes)

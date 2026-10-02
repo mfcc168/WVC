@@ -1,0 +1,139 @@
+name: APK release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*'
+  # Manual runs build a signed APK artifact without publishing a release.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apk-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build signed APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.package.outputs.version }}
+      prerelease: ${{ steps.package.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Restore release signing key
+        env:
+          WVC_RELEASE_KEYSTORE_BASE64: ${{ secrets.WVC_RELEASE_KEYSTORE_BASE64 }}
+          WVC_RELEASE_STORE_PASSWORD: ${{ secrets.WVC_RELEASE_STORE_PASSWORD }}
+          WVC_RELEASE_KEY_ALIAS: ${{ secrets.WVC_RELEASE_KEY_ALIAS }}
+          WVC_RELEASE_KEY_PASSWORD: ${{ secrets.WVC_RELEASE_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in WVC_RELEASE_KEYSTORE_BASE64 WVC_RELEASE_STORE_PASSWORD WVC_RELEASE_KEY_ALIAS WVC_RELEASE_KEY_PASSWORD; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Missing Actions secret $name. Follow docs/APK_RELEASES.md."
+              exit 1
+            fi
+          done
+          umask 077
+          mkdir -p "$RUNNER_TEMP/wvc-signing"
+          printf '%s' "$WVC_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/wvc-signing/release.jks"
+          test -s "$RUNNER_TEMP/wvc-signing/release.jks"
+          echo "WVC_RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/wvc-signing/release.jks" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+          cmdline-tools-version: '13114758'
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install Android SDK
+        run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0'
+
+      - name: Test, lint, and build release APK
+        env:
+          WVC_RELEASE_STORE_PASSWORD: ${{ secrets.WVC_RELEASE_STORE_PASSWORD }}
+          WVC_RELEASE_KEY_ALIAS: ${{ secrets.WVC_RELEASE_KEY_ALIAS }}
+          WVC_RELEASE_KEY_PASSWORD: ${{ secrets.WVC_RELEASE_KEY_PASSWORD }}
+        run: bash gradlew :app:testDebugUnitTest :app:lintRelease :app:assembleRelease --no-daemon --no-configuration-cache
+
+      - name: Verify signature and prepare downloads
+        id: package
+        run: python3 .github/scripts/prepare_release.py
+
+      - name: Upload signed APK and checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: wvc-release-${{ github.run_id }}
+          path: build/release-dist/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Remove signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/wvc-signing/release.jks"
+
+      - name: Upload validation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wvc-release-reports-${{ github.run_id }}
+          path: app/build/reports/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  publish:
+    name: Publish GitHub release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: wvc-release-${{ github.run_id }}
+          path: dist
+
+      - name: Verify downloaded APK checksum
+        working-directory: dist
+        run: sha256sum --check SHA256SUMS.txt
+
+      - name: Publish APK and checksum
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
+          IS_PRERELEASE: ${{ needs.build.outputs.prerelease }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Published assets stay unchanged on reruns; failed draft uploads can resume.
+          if gh release view "$RELEASE_TAG" --json isDraft > "$RUNNER_TEMP/wvc-release.json" 2>/dev/null; then
+            if [[ "$(jq -r '.isDraft' "$RUNNER_TEMP/wvc-release.json")" != 'true' ]]; then
+              echo "::notice::Release $RELEASE_TAG is already published; leaving it unchanged."
+              exit 0
+            fi
+          else
+            options=(--draft --verify-tag --generate-notes --title "WVC $RELEASE_VERSION")
+            if [[ "$IS_PRERELEASE" == 'true' ]]; then
+              options+=(--prerelease)
+            fi
+            gh release create "$RELEASE_TAG" "${options[@]}"
+          fi
+          gh release upload "$RELEASE_TAG" "dist/WVC-$RELEASE_VERSION.apk" dist/SHA256SUMS.txt --clobber
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease="$IS_PRERELEASE"
+          echo "Published WVC $RELEASE_VERSION with a signed APK and SHA-256 checksum." >> "$GITHUB_STEP_SUMMARY"
